@@ -520,10 +520,10 @@ int usb_klsi_attach( int deviceID )
 
   // Openned connection we can now use UDP debugging.
   set_udp_log( 1 );
-  lock_set_out( &udp_log);
+  //lock_set_out( &udp_log);
 
   // Send a message via UDP debugging.
-  lock_printf( "Hello!" );
+  //lock_printf( "Hello!" );
 
   return 0;  // success
 }

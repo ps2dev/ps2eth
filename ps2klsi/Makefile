@@ -23,7 +23,7 @@ clean:
 #  PS2KLSI.IRX BUILD INSTRUCTIONS
 
 ps2klsi_LDFLAGS = -L$(PS2LIB)/iop/lib -L$(PS2IP)/iop/lib
-ps2klsi_LDADD = -liop_ps2debug -liop_ps2ip -lkernel
+ps2klsi_LDADD =  -liop_ps2ip -lkernel
 ps2klsi_OBJECTS = driver.o etharp.o ps2eth.o
 
 

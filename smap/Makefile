@@ -8,23 +8,11 @@
 #.SUFFIXES: .S .c .o .s .elf .irx
 
 #  ------------------------------------------------------------------------
-#  COMPILERS
+#  INCLUDE PREFS
 
-IOPCC = iop-gcc
-IOPAR = iop-ar
-IOPLD = iop-ld
-IOPAS = iop-as
-EECC  = ee-gcc
-EEAR  = ee-ar
-EELD  = ee-gcc
+include ../Makefile.pref
+include ../Makefile.global
 
-
-#  ------------------------------------------------------------------------
-#  LWIP PATHS
-#ROOT = /home/Nickvv/source/ps2-cvs
-ROOT = /home/Administrator/livemedia
-
-LWIP = $(ROOT)/ps2ip/iop/lwip060rc1
 LWIPINC = $(LWIP)/src/include
 LWIPCORE = $(LWIP)/src/core
 LWIPAPI = $(LWIP)/src/api
@@ -38,9 +26,9 @@ EECOMPILE = $(EECC) $(EEINCLUDES) $(EECFLAGS)
 EELINK = $(EELD)  
 
 IOPCFLAGS = -G0 -nostdlib -fno-builtin  -fomit-frame-pointer -Wall -EL -mcpu=r3000 -O2
-IOPINCLUDES = -I. -I$(ROOT)/ps2ip/iop/ps2ip/include -I$(LWIPINC) -I$(LWIPINC)/ipv4 -I$(PS2LIB)/common/include -I$(PS2LIB)/iop/include
+IOPINCLUDES = -I. -I$(PS2IP)/iop/ps2ip/include -I$(LWIPINC) -I$(LWIPINC)/ipv4 -I$(PS2LIB)/common/include -I$(PS2LIB)/iop/include
 IOPCOMPILE = $(IOPCC) $(IOPINCLUDES) $(IOPCFLAGS)
-IOPLINK = $(IOPLD) --script mipsirx.x 
+IOPLINK = $(IOPLD)  
 
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_DATA =${INSTALL} -m 644
@@ -60,8 +48,8 @@ clean:
 #  ------------------------------------------------------------------------
 #  PS2SMAP.IRX BUILD INSTRUCTIONS
 
-ps2smap_LDFLAGS = -L$(PS2LIB)/iop/lib -L$(ROOT)/ps2ip/iop/lib
-ps2smap_LDADD = -liop_ps2debug -liop_ps2ip -lkernel
+ps2smap_LDFLAGS = -L$(PS2LIB)/iop/lib -L$(PS2IP)/iop/lib
+ps2smap_LDADD = -liop_ps2ip -lkernel
 ps2smap_OBJECTS = smap.o etharp.o smapif.o main.o
 
 
