@@ -10,7 +10,7 @@
 
 static int init = 0;
 
-int smap_txbd_check(smap_state_t *state);
+static int smap_txbd_check(smap_state_t *state);
 static int smap_receive(smap_state_t *state);
 static int smap_transmit(smap_state_t *state);
 
@@ -222,31 +222,6 @@ void smap_tx_event(smap_state_t *state)
 	}
 }
 
-int smap_txbd_check(smap_state_t *state)
-{
-	USE_SMAP_TX_BD;
-	u16 stat, len, ptr;
-	int count = 0;
-
-	while (state->txbd_used > 0) {
-		if ((stat = tx_bd[state->txbdi].ctrl_stat) & SMAP_BD_TX_READY)
-			return count;
-
-		len = tx_bd[state->txbdi].length;
-		ptr = tx_bd[state->txbdi].pointer;
-
-		if (stat & SMAP_BD_TX_ERROR) {
-		}
-
-		count++;
-		state->txbp += (len + 3) & 0xfffc;
-		state->txbdi++;
-		--state->txbd_used;
-	}
-
-	return count;
-}
-
 static u32 smap_dma_transfer(void *buf, u32 size, int dir)
 {
 	USE_SMAP_REGS;
@@ -290,15 +265,16 @@ static int smap_receive(smap_state_t *state)
 	USE_SMAP_REGS;
 	USE_SMAP_RX_BD;
 	struct pbuf *p, *q;
-	int res, received = 0;
+	int rxbdi, res, received = 0;
 	u16 stat, len, ptr, plen;
 
 	while (1) {
-		if ((stat = rx_bd[state->rxbdi].ctrl_stat) & SMAP_BD_RX_EMPTY)
+		rxbdi = state->rxbdi & 0x3f;
+		if ((stat = rx_bd[rxbdi].ctrl_stat) & SMAP_BD_RX_EMPTY)
 			break;
 
-		len = rx_bd[state->rxbdi].length;
-		ptr = rx_bd[state->rxbdi].pointer;
+		len = rx_bd[rxbdi].length;
+		ptr = rx_bd[rxbdi].pointer;
 
 		if (stat & SMAP_BD_TX_ERROR) {
 
@@ -334,7 +310,7 @@ error:
 
 next_bd:
 		SMAP_REG8(SMAP_R_RXFIFO_FRAME_DEC) = 0;
-		rx_bd[state->rxbdi].ctrl_stat = SMAP_BD_RX_EMPTY;
+		rx_bd[rxbdi].ctrl_stat = SMAP_BD_RX_EMPTY;
 		state->rxbdi++;
 	}
 
@@ -343,19 +319,72 @@ next_bd:
 
 static int smap_transmit(smap_state_t *state)
 {
+	USE_SMAP_REGS;
+	USE_SMAP_TX_BD;
 	struct pbuf *p = state->tx_pbuf, *q;
-	int transmitted = 0;
+	int txbdi, res, transmitted = 0;
+	u16 plen, alen, ptr;
 
-	while (1) {
-		if (!p)
+	/* Send each pbuf in the chain individually.  */
+	for (q = p; q; q = q->next) {
+		if (state->txbd_used >= SMAP_BD_MAX_ENTRY)
 			goto done;
 
-		if (state->txbd_used >= 64)
+		alen = ((plen = q->len) + 3) & 0xfffc;
+		if (alen >= state->txbp)
 			goto done;
+
+		ptr = SMAP_REG16(SMAP_R_TXFIFO_WR_PTR) + 4096;
+		if ((res = smap_dma_transfer(q->payload, plen, SMAP_DMA_OUT)) > 0)
+			q->payload += res;
+
+		while (res < plen) {
+			SMAP_REG32(SMAP_R_TXFIFO_DATA) = *(u32 *)q->payload;
+			q->payload += 4;
+			res += 4;
+		}
+
+		transmitted = 1;
+		txbdi = state->txbdi & 0x3f;
+		tx_bd[txbdi].length = plen;
+		tx_bd[txbdi].pointer = ptr;
+		SMAP_REG8(SMAP_R_TXFIFO_FRAME_INC) = 0;
+		tx_bd[txbdi].ctrl_stat = SMAP_BD_TX_READY| \
+			SMAP_BD_TX_GENFCS|SMAP_BD_TX_GENPAD;
+
+		state->txbdi++;
+		state->txbd_used++;
+		state->txbp -= alen;
 	}
 
 done:
 	return transmitted;
+}
+
+static int smap_txbd_check(smap_state_t *state)
+{
+	USE_SMAP_TX_BD;
+	u16 stat, len, ptr;
+	int txbdsi, count = 0;
+
+	while (state->txbd_used > 0) {
+		txbdsi = state->txbdsi & 0x3f;
+		if ((stat = tx_bd[txbdsi].ctrl_stat) & SMAP_BD_TX_READY)
+			return count;
+
+		len = tx_bd[txbdsi].length;
+		ptr = tx_bd[txbdsi].pointer;
+
+		if (stat & SMAP_BD_TX_ERROR) {
+		}
+
+		count++;
+		state->txbp += (len + 3) & 0xfffc;
+		state->txbdsi++;
+		--state->txbd_used;
+	}
+
+	return count;
 }
 
 static int smap_phy_read(int reg, u16 *data)

@@ -59,10 +59,10 @@ typedef struct {
 	u8	hwaddr[6];	/* MAC address.  */
 
 	u16	txbp;		/* Pointer into the TX buffer.  */
+	int	txbdsi;		/* Saved index into TX BD.  */
 	int	txbdi;		/* Index into current TX BD.  */
 	int	txbd_used;	/* Keeps track of how many TX BD's have been used.  */
 	struct pbuf *tx_pbuf;	/* This is passed in from the ps2ip interface.  */
-	u16	tx_plen;	/* This is passed in from the ps2ip interface.  */
 
 	u16	rxbp;		/* Pointer into the RX buffer.  */
 	int	rxbdi;		/* Index into current RX BD.  */
