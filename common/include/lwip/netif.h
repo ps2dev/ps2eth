@@ -81,7 +81,7 @@ struct netif {
   /** This field can be set by the device driver and could point
       to state information for the device. */
   void *state;
-#if LWIP_DHCP
+#if 1 // LWIP_DHCP
   /** the DHCP client state information for this netif */
   struct dhcp *dhcp;
 #endif
