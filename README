@@ -1,0 +1,19 @@
+
+PS2ETH
+----------------------------------------------------------------------------
+
+This project is for developing ps2 ethernet drivers.  Each driver may be
+covered by a difference software license.  Please check the license of the
+driver before using it.
+
+
+CURRENT DRIVERS
+----------------------------------------------------------------------------
+
+ps2klsi - This driver is for USB attached Kawasaki chipset ethernet 
+          adapters.  This currently only recognises the NetGear EA101
+          network adapter.
+
+
+
+
