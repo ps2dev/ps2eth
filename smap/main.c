@@ -1,5 +1,7 @@
 /*
  * Copyright (c) Tord Lindstrom (pukko@home.se)
+ * Copyright (c) adresd ( adresd_ps2dev@yahoo.com )
+ *
  */
 
 #include <tamtypes.h>
@@ -39,14 +41,13 @@
 
 #define UNKN_POFF   *(volatile unsigned char *)0xbf402008
 
-#define	SMAP16(offset)	\
-	(*(volatile u_int16_t *)(SMAP_BASE + (offset)))
+#define	SMAP16(offset)	(*(volatile u_int16_t *)(SMAP_BASE + (offset)))
 
 
 //////////////////////////////////////////////////////////////////////////
 // Some global stuff
 int irqCounter;
-static int smapEvent;
+int smapEvent;
 
 unsigned int unhandledIrq = 0;
 
@@ -87,6 +88,9 @@ smapIrq(void *data)
 void
 disableDev9(void)
 {
+#ifdef PS2DRV_COMPAT
+    dev9Shutdown();
+#else
     // This will turn off dev9..
     UNKN_1466 = 1;
     UNKN_146C = 0;
@@ -94,13 +98,42 @@ disableDev9(void)
     UNKN_1460 = UNKN_1464;
 
     UNKN_POFF |= 0x4;
-
+#endif
 }
 
 //////////////////////////////////////////////////////////////////////////
 static int
 detectAndInitDev9(void)
 {
+#ifdef PS2DRV_COMPAT
+    // this is done for us, by loading ps2dev9
+
+    unsigned short temp16;
+    unsigned int oldint;
+    {
+        struct t_event event;
+
+        event.attr = 0;
+        event.option = 0;
+        event.init_mask = 0;
+        smapEvent = CreateEventFlag(&event);
+    }
+
+    if (smapEvent <= 0)
+    {
+        printf("Could not create event flag (%x)\n", smapEvent);
+        return -3;
+    }
+
+    CpuSuspendIntr(&oldint);
+    temp16 = SMAP16(SMAP_INTR_ENABLE);
+    SMAP16(SMAP_INTR_ENABLE) = 0;
+    temp16 = SMAP16(SMAP_INTR_ENABLE);
+    CpuResumeIntr(oldint);
+
+    UNKN_1464 = 3;
+
+#else
 
     unsigned short temp16;
     unsigned int oldint;
@@ -179,7 +212,7 @@ detectAndInitDev9(void)
     CpuResumeIntr(oldint);
 
     UNKN_1464 = 3;
-
+#endif
     return 0;
 }
 
@@ -187,7 +220,7 @@ detectAndInitDev9(void)
 void
 enableDev9Intr(void)
 {
-
+#ifndef PS2DRV_COMPAT
     // Enable interrupt handler
     CpuDisableIntr();
 
@@ -197,6 +230,7 @@ enableDev9Intr(void)
     CpuEnableIntr();
 
     UNKN_1466 = 0;
+#endif
 }
 
 //////////////////////////////////////////////////////////////////////////

@@ -5,6 +5,7 @@
    Copyright (c)2001 YAEGASHI Takeshi
    Copyright (2)2002 Dan Potter
    Copyright (c)2003 T Lindstrom
+   Copyright (c)2003 adresd
    License: GPL
 
    $Id$
@@ -499,19 +500,19 @@ smap_interrupt()
 	flags = irq_disable();
 
 	stat = SMAPREG16(smap,SMAP_INTR_STAT) & INTR_BITMSK;
-#if 0
-    // Int handler disables all intr's
-	ena =  SMAPREG16(smap,SMAP_INTR_ENABLE) & INTR_BITMSK;
-	stat &= ena;
-#endif
-    retval = stat;
+
+      retval = stat;
 
 	if (stat == 0)
 		goto end;
 
 	if (stat & INTR_TXDNV) {
 		/* disable TXDNV interrupt */
+#ifdef PS2DRV_COMPAT
+		dev9IntrDisable(INTR_TXDNV);
+#else
 		SMAPREG16(smap,SMAP_INTR_ENABLE) &= ~INTR_TXDNV;
+#endif
 		smap->flags |= SMAP_F_TXDNV_DISABLE;
 		/* clear interrupt */
 		SMAPREG16(smap,SMAP_INTR_CLR) = INTR_TXDNV;
@@ -521,7 +522,11 @@ smap_interrupt()
 	}
 	if (stat & INTR_RXDNV) {
 		/* disable RXDNV interrupt */
+#ifdef PS2DRV_COMPAT
+		dev9IntrDisable(INTR_RXDNV);
+#else
 		SMAPREG16(smap,SMAP_INTR_ENABLE) &= ~INTR_RXDNV;
+#endif
 		smap->flags |= SMAP_F_RXDNV_DISABLE;
 		/* clear interrupt */
 		SMAPREG16(smap,SMAP_INTR_CLR) = INTR_RXDNV;
@@ -570,6 +575,15 @@ smap_clear_all_interrupt(struct smap_chan *smap)
 static void
 smap_interrupt_XXable(struct smap_chan *smap, int enable_flag)
 {
+#ifdef PS2DRV_COMPAT
+	if (enable_flag) {
+		/* enable interrupt */
+		dev9IntrEnable(INTR_ENA_ALL);
+	} else {
+		/* disable interrupt */
+		dev9IntrDisable(INTR_ENA_ALL);
+	}
+#else
 	if (enable_flag) {
 		/* enable interrupt */
 		SMAPREG16(smap,SMAP_INTR_ENABLE) |= INTR_ENA_ALL;
@@ -579,7 +593,7 @@ smap_interrupt_XXable(struct smap_chan *smap, int enable_flag)
 		SMAPREG16(smap,SMAP_INTR_ENABLE) &= ~INTR_ENA_ALL;
 		EMAC3REG_WRITE(smap, SMAP_EMAC3_INTR_ENABLE, 0);
 	}
-	return;
+#endif
 }
 
 static void
@@ -794,6 +808,41 @@ smap_emac3_soft_reset(struct smap_chan *smap)
 	return(0);
 }
 
+#ifdef PS2DRV_COMPAT
+#define	SMAP16(offset)	(*(volatile u_int16_t *)(SMAP_BASE + (offset)))
+#define UNKN_1466   *(volatile unsigned short *)0xbf801466
+extern int irqCounter;
+extern unsigned int unhandledIrq;
+extern int smapEvent;
+
+static int smap_intr_cb(int unused)
+{
+    unsigned short smapIntr;
+
+
+    if(SMAP16(SMAP_INTR_ENABLE) & SMAP16(SMAP_INTR_STAT)) {
+        irqCounter++;
+
+        do {
+            smapIntr = SMAP16(SMAP_INTR_STAT);
+            if (!(smapIntr & INTR_BITMSK)) {
+                // Uh.. Strange
+                unhandledIrq = (~INTR_BITMSK) & smapIntr;
+                break;
+            }
+            else {
+                smap_intr_interrupt_XXable(0);
+                iSetEventFlag(smapEvent, 1);
+            }
+        } while (SMAP16(SMAP_INTR_STAT) & SMAP16(SMAP_INTR_ENABLE));
+    }
+
+    UNKN_1466 = 1;
+    UNKN_1466 = 0;
+	return 0;
+}
+#endif
+
 static void
 smap_emac3_set_defvalue(struct smap_chan *smap)
 {
@@ -827,6 +876,15 @@ smap_emac3_set_defvalue(struct smap_chan *smap)
 	e3v = ( ((16&E3_RX_LO_WATER_MSK)<<E3_RX_LO_WATER_BITSFT) |
 			((128&E3_RX_HI_WATER_MSK)<<E3_RX_HI_WATER_BITSFT) );
 	EMAC3REG_WRITE(smap, SMAP_EMAC3_RX_WATERMARK, e3v);
+
+#ifdef PS2DRV_COMPAT
+      {
+	  int i;
+ 	  /* Register the callbacks for the interrupts we're handling.  */
+	  for (i = 2; i < 7; i++)
+		dev9RegisterIntrCb(i, smap_intr_cb);
+	}
+#endif
 
 	return;
 }
@@ -1709,16 +1767,27 @@ smap_intr_interrupt_XXable(int enable_flag)
     int oldIntr;
 
     CpuSuspendIntr(&oldIntr);
+#ifdef PS2DRV_COMPAT
+	if (enable_flag) {
+		/* enable interrupt */
+		dev9IntrEnable(INTR_ENA_ALL);
+	} else {
+		/* disable interrupt */
+		dev9IntrDisable(INTR_ENA_ALL);
+	}
+#else
+    CpuSuspendIntr(&oldIntr);
 	if (enable_flag) {
 		/* enable interrupt */
 		SMAPREG16(smap,SMAP_INTR_ENABLE) |= INTR_ENA_ALL;
-        EMAC3REG_WRITE(smap, SMAP_EMAC3_INTR_ENABLE, E3_INTR_ALL);
+	      EMAC3REG_WRITE(smap, SMAP_EMAC3_INTR_ENABLE, E3_INTR_ALL);
 	} else {
 		/* disable interrupt */
 		SMAPREG16(smap,SMAP_INTR_ENABLE) &= ~INTR_ENA_ALL;
-        EMAC3REG_WRITE(smap, SMAP_EMAC3_INTR_ENABLE, 0);
+	      EMAC3REG_WRITE(smap, SMAP_EMAC3_INTR_ENABLE, 0);
 	}
     CpuResumeIntr(oldIntr);
+#endif
 	return;
 }
 
