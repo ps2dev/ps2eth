@@ -146,7 +146,7 @@ detectAndInitDev9(void)
 
 
     {
-        struct EVENT event;
+        struct t_event event;
 
         event.attr = 0;
         event.option = 0;

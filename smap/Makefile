@@ -21,10 +21,11 @@ EELD  = ee-gcc
 
 #  ------------------------------------------------------------------------
 #  LWIP PATHS
-ROOT = /home/Administrator
+ROOT = $(PS2DEV)
 PS2LIB = $(ROOT)/ps2lib
+PS2IP = $(ROOT)/ps2ip
 
-LWIP = $(ROOT)/ps2ip/iop/lwip060rc1
+LWIP = $(ROOT)/lwip060rc1
 #LWIP = $(ROOT)/ps2ip/iop/lwip_cvs
 LWIPINC = $(LWIP)/src/include
 LWIPCORE = $(LWIP)/src/core
@@ -40,7 +41,7 @@ EECOMPILE = $(EECC) $(EEINCLUDES) $(EECFLAGS)
 EELINK = $(EELD)  
 
 IOPCFLAGS = -G0 -nostdlib -fno-builtin  -fomit-frame-pointer -Wall -EL -mcpu=r3000 -O2
-IOPINCLUDES = -I. -I../ps2ip/include -I$(LWIPINC) -I$(LWIPINC)/ipv4 -I$(PS2LIB)/common/include -I$(PS2LIB)/iop/include
+IOPINCLUDES = -I. -I$(PS2IP)/iop/ps2ip/include -I$(LWIPINC) -I$(LWIPINC)/ipv4 -I$(PS2LIB)/common/include -I$(PS2LIB)/iop/include
 IOPCOMPILE = $(IOPCC) $(IOPINCLUDES) $(IOPCFLAGS)
 IOPLINK = $(IOPLD) --script mipsirx.x 
 
@@ -51,7 +52,7 @@ INSTALL_DATA =${INSTALL} -m 644
 #  PROJECTS TO BUILD
 
 all: ps2smap.irx
-	cp ps2smap.irx $(PS2LIB)/ee/samples/iptest/ps2smap.irx
+	cp ps2smap.irx ../ps2smap.irx
 
 
 clean:
@@ -62,8 +63,8 @@ clean:
 #  ------------------------------------------------------------------------
 #  PS2SMAP.IRX BUILD INSTRUCTIONS
 
-ps2smap_LDFLAGS = -L$(PS2LIB)/iop/lib -L../lib
-ps2smap_LDADD = -liop_ps2debug -liop_ps2ip -lkernel -liop_sysclib -liop_thsemap -liop_usbd -liop_thbase -liop_intrman -liop_thevent -liop_loadcore
+ps2smap_LDFLAGS = -L$(PS2LIB)/iop/lib -L$(PS2IP)/iop/lib
+ps2smap_LDADD = -liop_ps2debug -liop_ps2ip -lkernel 
 ps2smap_OBJECTS = smap.o etharp.o smapif.o main.o
 
 
