@@ -91,6 +91,8 @@ void low_level_input(char *buf, int len)
 	smapif_input((struct netif*)this_netif,buf,len);	
 }
 
+// External func
+extern void enableDev9Intr(void);
 
 static void
 low_level_init(struct netif *netif)
@@ -111,6 +113,8 @@ low_level_init(struct netif *netif)
 		  (unsigned char)(smapif->ethaddr->addr[4]),	
 		  (unsigned char)(smapif->ethaddr->addr[5]));
 #endif  
+  enableDev9Intr();
+  printf("smap: dev9 interrupt enabled...\n");
   smap_start();
 }
 
@@ -246,13 +250,17 @@ smapif_input(struct netif *netif, char * bufptr, int len)
     }
 }
 /*----------------------------------------------------------------------*/
-static void
+
+static struct timestamp clock_ticks;
+
+/*----------------------------------------------------------------------*/
+static unsigned int
 arp_timer(void *arg)
 {
   WaitSema(ArpMutex);
   etharp_tmr();
   SignalSema(ArpMutex);
-  //  sys_timeout(ARP_TMR_INTERVAL, (sys_timeout_handler)arp_timer, NULL);
+  return (unsigned int)arg;
 }
 /*----------------------------------------------------------------------*/
 /*
@@ -270,7 +278,7 @@ smapif_init(struct netif *netif)
   struct smapif *smapif;
 
   this_netif = netif;  
-  smapif = &smap_etherif; //mem_malloc(sizeof(struct smapif));
+  smapif = &smap_etherif;
   netif->state = smapif;
   netif->name[0] = IFNAME0;
   netif->name[1] = IFNAME1;
@@ -282,7 +290,7 @@ smapif_init(struct netif *netif)
   low_level_init(netif);
   etharp_init();
   
-  // XXX: Fix arp timer (easily done w alarm)
-  //  sys_timeout(ARP_TMR_INTERVAL, (sys_timeout_handler)arp_timer, NULL);
+  USec2SysClock(ARP_TMR_INTERVAL * 1000, &clock_ticks);
+  SetAlarm(&clock_ticks, arp_timer, clock_ticks.clk);
 }
 /*----------------------------------------------------------------------*/

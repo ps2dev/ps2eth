@@ -58,8 +58,9 @@ irq_restore(uint32 flags)
 // Guess this decl. should have is own header file
 extern void low_level_input(char *buf, int len);
 
-
+#ifndef DEBUG
 #define printf(args...)  do { } while(0)
+#endif
 
 static struct smap_chan *smap_chan = NULL;
 static struct smap_chan smap0;

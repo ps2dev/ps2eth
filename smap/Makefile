@@ -21,7 +21,8 @@ EELD  = ee-gcc
 
 #  ------------------------------------------------------------------------
 #  LWIP PATHS
-ROOT = /home/Nickvv/source/ps2-cvs
+#ROOT = /home/Nickvv/source/ps2-cvs
+ROOT = /home/Administrator/livemedia
 
 LWIP = $(ROOT)/ps2ip/iop/lwip060rc1
 LWIPINC = $(LWIP)/src/include
