@@ -7,7 +7,11 @@ TOPDIR = ..
 IOP_BIN = ../bin/ps2smap.irx
 IOP_OBJS = main.o smapif.o smap.o
 
-IOP_CFLAGS += -Wall -fno-builtin
+ifeq ($(DEBUG),1)
+DEBUG_FLAGS = -DDEBUG
+endif
+
+IOP_CFLAGS += -Wall -fno-builtin $(DEBUG_FLAGS)
 IOP_LDFLAGS += -L$(PS2IP)/iop/lib -s
 IOP_LIBS += -liop_ps2ip -llwip_common
 

@@ -34,18 +34,29 @@
 #define M_PRINTF(format, args...)	\
 	printf(MODNAME ": " format, ## args)
 
+#ifdef DEBUG
+#define DPRINTF(format, args...) printf("%s: " format, __FUNCTION__ , ## args)
+#else
+#define DPRINTF(format, args...)
+#endif
+
 /* Event flags.  */
 #define SMAP_EVENT_INIT		0x01
 #define SMAP_EVENT_EXIT		0x02
 #define SMAP_EVENT_INTR		0x04
+#define SMAP_EVENT_TX		0x08
+#define SMAP_EVENT_ALARM	0x10
 
-#define SMAP_EVENT_ALL		(SMAP_EVENT_INIT|SMAP_EVENT_EXIT|SMAP_EVENT_INTR)
+#define SMAP_EVENT_ALL		(SMAP_EVENT_INIT|SMAP_EVENT_EXIT| \
+				SMAP_EVENT_INTR|SMAP_EVENT_TX|SMAP_EVENT_ALARM)
 
-/* ARP events.  */
-#define SMAP_ARP_EVENT_IN	0x01	/* ARP input.  */
-#define SMAP_ARP_EVENT_TMR	0x02	/* ARP timer.  */
+/* Events handled by the interface thread.  */
+#define SMAP_IF_EVENT_INCPL	0x01	/* SMAP device initialization completed.  */
+#define SMAP_IF_EVENT_RECV	0x02	/* Packet data received.  */
+#define SMAP_IF_EVENT_ARP	0x04	/* ARP timer expired.  */
 
-#define SMAP_ARP_EVENT_ALL	(SMAP_ARP_EVENT_IN|SMAP_ARP_EVENT_TMR)
+#define SMAP_IF_EVENT_ALL	(SMAP_IF_EVENT_INCPL|SMAP_IF_EVENT_RECV| \
+				SMAP_IF_EVENT_ARP)
 
 /* Directions for DMA transfers.  */
 #define SMAP_DMA_IN	0
@@ -67,21 +78,27 @@ typedef struct {
 	struct eth_addr eth_addr; /* MAC address.  */
 	u16	checksum;	/* Checksum of the MAC address.  */
 
-	int	has_init;	/* Has SMAP been initialized?  */
 	int	evflg;		/* The global event flag.  */
 	int	thid;		/* The ID of the main thread.  */
 	struct netif *netif;	/* lwIP network interface.  */
 
-	int	arp_evflg;	/* Used to signal the ARP thread.  */
-	struct pbuf *arp_pbuf;	/* Data passed into the ARP thread.  */
+	int	if_evflg;	/* Used to signal the interface thread.  */
 
-	u16	txbp;		/* Pointer into the TX buffer.  */
+	u16	txfree;		/* Number of bytes free in the TX FIFO.  */
 	int	txbdsi;		/* Saved index into TX BD.  */
 	int	txbdi;		/* Index into current TX BD.  */
 	int	txbd_used;	/* Keeps track of how many TX BD's have been used.  */
 
-	u16	rxbp;		/* Pointer into the RX buffer.  */
 	int	rxbdi;		/* Index into current RX BD.  */
+
+	struct pbuf *txq;	/* TX queue.  */
+	struct pbuf *rxq;	/* RX queue.  */
+	struct pbuf *lasttxp;	/* The last packet attempted for TX.  */
+
+	int	has_init;	/* SMAP has been initialized.  */
+	int	has_alarm_init;
+	int	has_link;	/* Link has been established.  */
+	iop_sys_clock_t timeout;
 
 	int	no_auto;	/* Don't use autonegotiation.  */
 
@@ -99,15 +116,18 @@ extern struct ip_addr smap_ip, smap_sm, smap_gw;
 
 int smap_reset(smap_state_t *state);
 
-int smap_init_event(smap_state_t *state);
-void smap_exit_event(smap_state_t *state);
-int smap_interrupt_event(smap_state_t *state);
-int smap_tx_event(smap_state_t *state, struct pbuf *p);
+void smap_thread(void *arg);
 
 
 /* LwIP and ARP interfaces (smapif.c)  */
 
 int smap_if_init(smap_state_t *state);
-void smap_if_input(smap_state_t *state, struct pbuf *p);
+
+/* Add a pbuf to the queue.  */
+void smap_p_enqueue(struct pbuf **pq, struct pbuf *p);
+/* Grab the next single pbuf from the queue.  */
+struct pbuf *smap_p_next(struct pbuf **pq);
+/* Empty the queue.  */
+struct pbuf *smap_p_dequeue(struct pbuf **pq);
 
 #endif	/* SMAP_H */

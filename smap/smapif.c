@@ -14,7 +14,7 @@ static err_t smap_if_start(struct netif *netif);
 static err_t smap_if_output(struct netif *netif, struct pbuf *p, struct ip_addr *ipaddr);
 static err_t smap_if_linkoutput(struct netif *netif, struct pbuf *p);
 
-static void arp_thread(void *arg);
+static void smap_if_thread(void *arg);
 
 int smap_if_init(smap_state_t *state)
 {
@@ -25,22 +25,22 @@ int smap_if_init(smap_state_t *state)
 
 	event.attr = 0;
 	event.bits = 0;
-	if ((state->arp_evflg = CreateEventFlag(&event)) < 0) {
-		M_PRINTF("Error: Couldn't create ARP event flag.\n");
+	if ((state->if_evflg = CreateEventFlag(&event)) < 0) {
+		M_PRINTF("Error: Couldn't create interface event flag.\n");
 		return 2;
 	}
 
 	thread.attr = TH_C;
 	thread.option = 0;
-	thread.thread = arp_thread;
+	thread.thread = smap_if_thread;
 	thread.stacksize = 4096;
 	thread.priority = 39;
 	if ((thid = CreateThread(&thread)) < 0) {
-		M_PRINTF("Error: Unable to create ARP thread.\n");
+		M_PRINTF("Error: Unable to create interface thread.\n");
 		return 3;
 	}
 	if (StartThread(thid, state) < 0) {
-		M_PRINTF("Error: Couldn't execute ARP thread.\n");
+		M_PRINTF("Error: Couldn't execute interface thread.\n");
 		return 4;
 	}
 
@@ -54,27 +54,73 @@ int smap_if_init(smap_state_t *state)
 	return 0;
 }
 
-void smap_if_input(smap_state_t *state, struct pbuf *p)
+void smap_if_input(smap_state_t *state)
 {
 	struct netif *netif = state->netif;
-	struct eth_hdr *eth_hdr = p->payload;
+	struct eth_hdr *eth_hdr;
+	struct pbuf *p = smap_p_dequeue(&state->rxq);
 
+	DPRINTF("enter, p is %p\n", p);
+	eth_hdr = p->payload;
 	switch (htons(eth_hdr->type)) {
 		case ETHTYPE_IP:
+			DPRINTF("IP\n");
 			etharp_ip_input(netif, p);
 			pbuf_header(p, -14);
 			netif->input(p, netif);
 			break;
 		case ETHTYPE_ARP:
-			state->arp_pbuf = p;
-			SetEventFlag(state->arp_evflg, SMAP_ARP_EVENT_IN);
+			DPRINTF("ARP\n");
+			etharp_arp_input(state->netif, &state->eth_addr, p);
 			break;
 		default:
 			pbuf_free(p);
 			break;
 	}
+	DPRINTF("exit\n");
 }
 
+static u32 etharp_alarm_cb(void *arg)
+{
+	iSetEventFlag(smap_state.if_evflg, SMAP_IF_EVENT_ARP);
+	return *(u32 *)arg;
+}
+
+void smap_if_thread(void *arg)
+{
+	iop_sys_clock_t arp_timer;
+	smap_state_t *state = (smap_state_t *)arg;
+	u32 bits;
+	int res, arp_init = 0;
+
+	while (1) {
+		if ((res = WaitEventFlag(state->if_evflg, SMAP_IF_EVENT_ALL, 0x11, &bits)))
+			break;
+
+		/* Packet(s) received.  */
+		if (bits & SMAP_IF_EVENT_RECV)
+			smap_if_input(state);
+
+		/* ARP timer expired.  */
+		if (bits & SMAP_IF_EVENT_ARP)
+			etharp_tmr();
+
+		/* The device has finished initialization.  */
+		if (bits & SMAP_IF_EVENT_INCPL) {
+			DPRINTF("Got init completion event.\n");
+
+			/* Initialize the ARP interface.  */
+			if (!arp_init) {
+				etharp_init();
+				USec2SysClock(ARP_TMR_INTERVAL * 1000, &arp_timer);
+				SetAlarm(&arp_timer, etharp_alarm_cb, &arp_timer.lo);
+				arp_init = 1;
+			}
+		}
+
+	}
+	DPRINTF("WaitEventFlag returned %d\n", res);
+}
 
 static err_t smap_if_start(struct netif *netif)
 {
@@ -107,42 +153,80 @@ static err_t smap_if_output(struct netif *netif, struct pbuf *p, struct ip_addr 
 static err_t smap_if_linkoutput(struct netif *netif, struct pbuf *p)
 {
 	smap_state_t *state = (smap_state_t *)netif->state;
+
+	smap_p_enqueue(&state->txq, p);
+	SetEventFlag(state->evflg, SMAP_EVENT_TX);
+	return 0;
+}
+
+static int priority_one(void)
+{
+	iop_thread_info_t thinfo;
 	int res;
 
-	/* Transmit the packets.  */
-	res = smap_tx_event(state, p);
-	return res == 1 ? 0 : -11 /* ERR_IF */;
-}
-
-static int etharp_alarm_cb(void *arg)
-{
-	iSetEventFlag(smap_state.arp_evflg, SMAP_ARP_EVENT_TMR);
-	return *(u32 *)arg;
-}
-
-static void arp_thread(void *arg)
-{
-	iop_sys_clock_t arp_timer;
-	smap_state_t *state = (smap_state_t *)arg;
-	struct pbuf *p;
-	u32 bits;
-
-	etharp_init();
-	USec2SysClock(ARP_TMR_INTERVAL * 1000, &arp_timer);
-	SetAlarm(&arp_timer, etharp_alarm_cb, &arp_timer.lo);
-
-	while (1) {
-		WaitEventFlag(state->arp_evflg, SMAP_ARP_EVENT_ALL, 0x11, &bits);
-
-		if (bits & SMAP_ARP_EVENT_IN) {
-			if ((p = etharp_arp_input(state->netif,
-					&state->eth_addr, state->arp_pbuf))) {
-				smap_if_linkoutput(state->netif, p);
-				pbuf_free(p);
-			}
-		}
-
-		if (bits & SMAP_ARP_EVENT_TMR)
-			etharp_tmr();
+	if ((res = ReferThreadStatus(0, &thinfo))) {
+		DPRINTF("ReferThreadStatus returned %d\n", res);
+		return res;
 	}
+
+	ChangeThreadPriority(0, 1);
+	return thinfo.info[IOP_THINFO_PRIORITY];
+}
+
+static void priority_reset(int priority)
+{
+	if ((priority - 1) < 126)
+		ChangeThreadPriority(0, priority);
+
+}
+
+void smap_p_enqueue(struct pbuf **pq, struct pbuf *p)
+{
+	struct pbuf *q;
+	int oldpri;
+
+	if ((oldpri = priority_one()) < 0)
+		return;
+
+	if (!(*pq)) {
+		*pq = p;
+	} else {
+		for (q = *pq; q->next != NULL; q = q->next)
+			;
+		q->next = p;
+	}
+
+	priority_reset(oldpri);
+}
+
+struct pbuf *smap_p_next(struct pbuf **pq)
+{
+	struct pbuf *head;
+	int oldpri;
+
+	if ((oldpri = priority_one()) < 0)
+		return NULL;
+
+	if ((head = *pq)) {
+		*pq = head->next;
+		head->next = NULL;
+	}
+
+	priority_reset(oldpri);
+	return head;
+}
+
+struct pbuf *smap_p_dequeue(struct pbuf **pq)
+{
+	struct pbuf *head;
+	int oldpri;
+
+	if ((oldpri = priority_one()) < 0)
+		return NULL;
+
+	head = *pq;
+	*pq = NULL;
+
+	priority_reset(oldpri);
+	return head;
 }

@@ -18,7 +18,6 @@ struct ip_addr smap_ip, smap_sm, smap_gw;
 
 smap_state_t smap_state;
 
-static void main_thread(void *arg);
 static int parse_options(int argc, char **argv, smap_state_t *state);
 static int show_usage(void);
 
@@ -53,7 +52,7 @@ int _start(int argc, char **argv)
 
 	thread.attr = TH_C;
 	thread.option = 0;
-	thread.thread = main_thread;
+	thread.thread = smap_thread;
 	thread.stacksize = 8192;
 	thread.priority = 40;
 	if ((state->thid = CreateThread(&thread)) < 0) {
@@ -85,34 +84,6 @@ error:
 		DeleteEventFlag(state->evflg);
 	
 	return 1;
-}
-
-static void main_thread(void *arg)
-{
-	smap_state_t *state = (smap_state_t *)arg;
-	int res;
-	u32 bits;
-
-	state->txbp = SMAP_TX_BUFSIZE;
-
-	while (1) {
-		if ((res = WaitEventFlag(state->evflg, SMAP_EVENT_ALL, 0x11, &bits)) != 0)
-			return;
-
-		if (bits & SMAP_EVENT_EXIT)
-			smap_exit_event(state);
-
-		if (bits & SMAP_EVENT_INIT) {
-			smap_init_event(state);
-
-			if (!state->has_init)
-				continue;
-		}
-
-		if (bits & SMAP_EVENT_INTR)
-			if (smap_interrupt_event(state))
-				smap_tx_event(state, NULL);
-	}
 }
 
 static int parse_options(int argc, char **argv, smap_state_t *state)

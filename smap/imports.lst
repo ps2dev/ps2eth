@@ -9,6 +9,8 @@ I_CreateThread
 I_DeleteThread
 I_StartThread
 I_TerminateThread
+I_ChangeThreadPriority
+I_ReferThreadStatus
 I_DelayThread
 I_SetAlarm
 I_USec2SysClock

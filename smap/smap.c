@@ -8,11 +8,16 @@
 
 #include "smap.h"
 
+static int smap_init_event(smap_state_t *state);
+static void smap_exit_event(smap_state_t *state);
+static int smap_tx_event(smap_state_t *state);
+static void smap_check_link(smap_state_t *state);
+
 static int smap_txbd_check(smap_state_t *state);
 static int smap_receive(smap_state_t *state);
-static int smap_transmit(smap_state_t *state, struct pbuf *p);
+static int smap_transmit(smap_state_t *state);
 
-static int smap_phy_init();
+static int smap_phy_init(smap_state_t *state);
 static int smap_phy_read(int reg, u16 *data);
 static int smap_phy_write(int reg, u16 data);
 
@@ -21,6 +26,14 @@ static int smap_intr_cb(int unused)
 	dev9IntrDisable(SMAP_INTR_BITMSK);
 	iSetEventFlag(smap_state.evflg, SMAP_EVENT_INTR);
 	return 0;
+}
+
+static unsigned int smap_alarm_cb(void *arg)
+{
+	smap_state_t *state = (smap_state_t *)arg;
+
+	iSetEventFlag(state->evflg, SMAP_EVENT_ALARM);
+	return state->timeout.lo;
 }
 
 int smap_reset(smap_state_t *state)
@@ -142,7 +155,88 @@ int smap_reset(smap_state_t *state)
 	return 0;
 }
 
-int smap_init_event(smap_state_t *state)
+void smap_thread(void *arg)
+{
+	USE_SPD_REGS;
+	USE_SMAP_REGS;
+	USE_SMAP_EMAC3_REGS;
+	smap_state_t *state = (smap_state_t *)arg;
+	int res, got_rx, link_retry = 3;
+	u32 bits, val;
+	u16 istat;
+
+	state->txfree = SMAP_TX_BUFSIZE;
+
+	while (1) {
+		if ((res = WaitEventFlag(state->evflg, SMAP_EVENT_ALL, 0x11, &bits)) != 0)
+			break;
+
+		if (bits & SMAP_EVENT_EXIT)
+			smap_exit_event(state);
+
+		if (bits & SMAP_EVENT_INIT) {
+			smap_init_event(state);
+
+			/* Let the interface thread know we are ready.  */
+			SetEventFlag(state->if_evflg, SMAP_IF_EVENT_INCPL);
+
+			/* Setup the alarm handler for link checking.  */
+			if (!state->has_alarm_init) {
+				USec2SysClock(1000000, &state->timeout);
+				SetAlarm(&state->timeout, smap_alarm_cb, state);
+				state->has_alarm_init = 1;
+			}
+
+			if (!state->has_init)
+				continue;
+		}
+
+		/* Make sure we have the interrupts we requested.  */
+		got_rx = 0;
+		if ((bits & SMAP_EVENT_INTR) &&
+				((istat = SPD_REG16(SPD_R_INTR_STAT)) &
+				 (SMAP_INTR_EMAC3|SMAP_INTR_RXEND|SMAP_INTR_RXDNV|
+				  SMAP_INTR_TXDNV))) {
+
+			if (istat & SMAP_INTR_EMAC3) {
+				val = SMAP_EMAC3_REG(SMAP_R_EMAC3_INTR_STAT);
+				SMAP_REG16(SMAP_R_INTR_CLR) = SMAP_INTR_EMAC3;
+				val = SMAP_E3_INTR_DEAD_0|SMAP_E3_INTR_SQE_ERR_0|
+					SMAP_E3_INTR_TX_ERR_0;
+				SMAP_EMAC3_SET(SMAP_R_EMAC3_INTR_STAT, val);
+			}
+			if (istat & SMAP_INTR_RXEND) {
+				SMAP_REG16(SMAP_R_INTR_CLR) = SMAP_INTR_RXEND;
+				got_rx = smap_receive(state);
+			}
+			if (istat & SMAP_INTR_RXDNV) {
+				SMAP_REG16(SMAP_R_INTR_CLR) = SMAP_INTR_RXDNV;
+			}
+			if (istat & SMAP_INTR_TXDNV) {
+				smap_txbd_check(state);
+				bits |= SMAP_EVENT_TX;
+			}
+		}
+
+		if (bits & SMAP_EVENT_TX)
+			smap_tx_event(state);
+
+		if (got_rx) {
+			link_retry = 3;
+			continue;
+		}
+
+		if (bits & SMAP_EVENT_ALARM) {
+			if (--link_retry > 0)
+				continue;
+
+			smap_check_link(state);
+		}
+	}
+	DPRINTF("WaitEventFlag returned %d\n", res);
+}
+
+static int smap_init_event(smap_state_t *state)
 {
 	USE_SMAP_EMAC3_REGS;
 	int res;
@@ -151,7 +245,7 @@ int smap_init_event(smap_state_t *state)
 		return 0;
 
 	dev9IntrEnable(SMAP_INTR_EMAC3|SMAP_INTR_RXEND|SMAP_INTR_RXDNV);
-	if ((res = smap_phy_init()) != 0)
+	if ((res = smap_phy_init(state)) != 0)
 		return res;
 
 	SMAP_EMAC3_SET(SMAP_R_EMAC3_MODE0, SMAP_E3_TXMAC_ENABLE|SMAP_E3_RXMAC_ENABLE);
@@ -161,7 +255,7 @@ int smap_init_event(smap_state_t *state)
 	return 0;
 }
 
-void smap_exit_event(smap_state_t *state)
+static void smap_exit_event(smap_state_t *state)
 {
 	USE_SMAP_EMAC3_REGS;
 
@@ -173,49 +267,12 @@ void smap_exit_event(smap_state_t *state)
 	state->has_init = 0;
 }
 
-int smap_interrupt_event(smap_state_t *state)
-{
-	USE_SPD_REGS;
-	USE_SMAP_REGS;
-	USE_SMAP_EMAC3_REGS;
-	u32 val;
-	u16 istat = SPD_REG16(SPD_R_INTR_STAT);
-
-	if (!(istat & (SMAP_INTR_EMAC3|SMAP_INTR_RXEND|SMAP_INTR_RXDNV|SMAP_INTR_TXDNV)))
-		return 0;
-
-	if (istat & SMAP_INTR_EMAC3) {
-		val = SMAP_EMAC3_REG(SMAP_R_EMAC3_INTR_STAT);
-		SMAP_REG16(SMAP_R_INTR_CLR) = SMAP_INTR_EMAC3;
-		val = SMAP_E3_INTR_DEAD_0|SMAP_E3_INTR_SQE_ERR_0|SMAP_E3_INTR_TX_ERR_0;
-		SMAP_EMAC3_SET(SMAP_R_EMAC3_INTR_STAT, val);
-	}
-
-	if (istat & SMAP_INTR_RXEND) {
-		SMAP_REG16(SMAP_R_INTR_CLR) = SMAP_INTR_RXEND;
-		smap_receive(state);
-	}
-
-	if (istat & SMAP_INTR_RXDNV) {
-		SMAP_REG16(SMAP_R_INTR_CLR) = SMAP_INTR_RXDNV;
-	}
-
-	if (istat & SMAP_INTR_TXDNV) {
-		SMAP_REG16(SMAP_R_INTR_CLR) = SMAP_INTR_TXDNV;
-		smap_txbd_check(state);
-		return 1;
-	}
-
-	return 0;
-}
-
-int smap_tx_event(smap_state_t *state, struct pbuf *p)
+static int smap_tx_event(smap_state_t *state)
 {
 	USE_SMAP_EMAC3_REGS;
-	int res = 0;
+	int res;
 
-	if (p)
-		res = smap_transmit(state, p);
+	res = smap_transmit(state);
 	smap_txbd_check(state);
 	dev9IntrEnable(SMAP_INTR_EMAC3|SMAP_INTR_RXEND|SMAP_INTR_RXDNV);
 
@@ -225,6 +282,16 @@ int smap_tx_event(smap_state_t *state, struct pbuf *p)
 	}
 
 	return res;
+}
+
+static void smap_check_link(smap_state_t *state)
+{
+	u16 phydata;
+
+	smap_phy_read(SMAP_DsPHYTER_BMSR, &phydata);
+	if (!(phydata & SMAP_PHY_BMSR_LINK)) {
+		state->has_link = 0;
+	}
 }
 
 static u32 smap_dma_transfer(void *buf, u32 size, int dir)
@@ -269,11 +336,12 @@ static int smap_receive(smap_state_t *state)
 {
 	USE_SMAP_REGS;
 	USE_SMAP_RX_BD;
-	struct pbuf *p, *q, *r = NULL;
+	struct pbuf *p, *q;
 	u8 *payload;
 	int rxbdi, res, received = 0;
 	u16 stat, len, ptr, plen;
 
+	DPRINTF("enter\n");
 	while (1) {
 		rxbdi = state->rxbdi & 0x3f;
 		if ((stat = rx_bd[rxbdi].ctrl_stat) & SMAP_BD_RX_EMPTY)
@@ -309,12 +377,8 @@ error:
 		}
 
 		/* Add this to our chain */
-		received = 1;
-		if (!r)
-			r = p;
-		else
-			pbuf_chain(r, p);
-		
+		received++;
+		smap_p_enqueue(&state->rxq, p);
 
 next_bd:
 		SMAP_REG8(SMAP_R_RXFIFO_FRAME_DEC) = 0;
@@ -322,13 +386,14 @@ next_bd:
 		state->rxbdi++;
 	}
 
-	/* All packets were received, now send them off.  */
+	/* All packets were received, notify the interface thread.  */
 	if (received)
-		smap_if_input(state, r);
+		SetEventFlag(state->if_evflg, SMAP_IF_EVENT_RECV);
+	DPRINTF("exit, returning %d\n", received);
 	return received;
 }
 
-static int smap_transmit(smap_state_t *state, struct pbuf *p)
+static int smap_transmit(smap_state_t *state)
 {
 	USE_SMAP_REGS;
 	USE_SMAP_TX_BD;
@@ -337,16 +402,26 @@ static int smap_transmit(smap_state_t *state, struct pbuf *p)
 	int txbdi, res, transmitted = 0;
 	u16 alen, ptr;
 
+	DPRINTF("enter\n");
 	/* Send each pbuf in the chain individually.  */
-	for (q = p; q; q = q->next) {
+	while (1) {
+		if (!(q = state->lasttxp)) {
+			if (!(q = smap_p_next(&state->txq)))
+				break;
+
+			state->lasttxp = q;
+		}
 		if (state->txbd_used >= SMAP_BD_MAX_ENTRY)
-			goto done;
+			break;
 
 		alen = (q->len + 3) & 0xfffc;
-		if (alen > state->txbp)
-			goto done;
+		if (alen > state->txfree)
+			break;
 
 		payload = q->payload;
+		DPRINTF("pbuf %p, payload is %p, alen is %d, flags %04x\n",
+				q, payload, alen, q->flags);
+
 		ptr = SMAP_REG16(SMAP_R_TXFIFO_WR_PTR) + SMAP_TX_BASE;
 		if ((res = smap_dma_transfer(payload, alen, SMAP_DMA_OUT)) > 0)
 			payload += res;
@@ -357,7 +432,7 @@ static int smap_transmit(smap_state_t *state, struct pbuf *p)
 			res += 4;
 		}
 
-		transmitted = 1;
+		transmitted++;
 		txbdi = state->txbdi & 0x3f;
 		tx_bd[txbdi].length = q->len;
 		tx_bd[txbdi].pointer = ptr;
@@ -367,10 +442,13 @@ static int smap_transmit(smap_state_t *state, struct pbuf *p)
 
 		state->txbdi++;
 		state->txbd_used++;
-		state->txbp -= alen;
+		state->txfree -= alen;
+
+		state->lasttxp = NULL;
+		pbuf_free(q);
 	}
 
-done:
+	DPRINTF("exit, returning %d\n", transmitted);
 	return transmitted;
 }
 
@@ -392,7 +470,7 @@ static int smap_txbd_check(smap_state_t *state)
 		}
 
 		count++;
-		state->txbp += (len + 3) & 0xfffc;
+		state->txfree += (len + 3) & 0xfffc;
 		state->txbdsi++;
 		--state->txbd_used;
 	}
@@ -441,7 +519,7 @@ static int smap_phy_write(int reg, u16 data)
 	return (i == 100);
 }
 
-static int smap_phy_init()
+static int smap_phy_init(smap_state_t *state)
 {
 	USE_SMAP_EMAC3_REGS;
 	u32 val;
@@ -476,8 +554,10 @@ static int smap_phy_init()
 				if (smap_phy_read(SMAP_DsPHYTER_BMSR, &phydata) != 0)
 					return 4;
 
-				if (phydata & SMAP_PHY_BMSR_LINK)
+				if (phydata & SMAP_PHY_BMSR_LINK) {
+					state->has_link = 1;
 					goto auto_done;
+				}
 			}
 		}
 		/* If autonegotiation failed, we got here, so restart it.  */
