@@ -27,11 +27,11 @@ static int smap_intr_cb(int unused)
 
 int smap_reset(smap_state_t *state)
 {
-	u16 hwaddr[4];
 	USE_SPD_REGS;
 	USE_SMAP_REGS;
 	USE_SMAP_EMAC3_REGS;
 	USE_SMAP_TX_BD; USE_SMAP_RX_BD;
+	u16 *hwaddr = (u16 *)state->hwaddr;
 	u32 val, checksum = 0;
 	int i;
 
@@ -89,6 +89,7 @@ int smap_reset(smap_state_t *state)
 	SMAP_REG16(SMAP_R_INTR_CLR) = SMAP_INTR_BITMSK;
 
 	/* Get our MAC address and make sure it checks out.  */
+	memset(hwaddr, 0, 6);
 	if (dev9GetEEPROM(hwaddr) < 0)
 		return -1;
 	if (!hwaddr[0] || !hwaddr[1] || !hwaddr[2])
@@ -97,7 +98,7 @@ int smap_reset(smap_state_t *state)
 	/* Verify the checksum.  */
 	for (i = 0; i < 3; i++)
 		checksum += hwaddr[i];
-	if (checksum != hwaddr[3])
+	if (checksum != state->checksum)
 		return -1;
 
 	val = SMAP_E3_FDX_ENABLE|SMAP_E3_IGNORE_SQE|SMAP_E3_MEDIA_100M|

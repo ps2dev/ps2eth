@@ -57,6 +57,7 @@ typedef struct {
    structure and passed between most SMAP-specific routines.  */
 typedef struct {
 	u8	hwaddr[6];	/* MAC address.  */
+	u16	checksum;	/* Checksum of the MAC address.  */
 
 	u16	txbp;		/* Pointer into the TX buffer.  */
 	int	txbdsi;		/* Saved index into TX BD.  */
