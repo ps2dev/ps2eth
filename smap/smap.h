@@ -23,11 +23,7 @@
 #include "speedregs.h"
 #include "smapregs.h"
 
-#include "lwip/ip.h"
-#include "lwip/pbuf.h"
-#include "lwip/netif.h"
-
-#include "netif/etharp.h"
+#include "ps2ip.h"
 
 #define MODNAME "ps2smap"
 

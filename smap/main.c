@@ -102,5 +102,3 @@ static int show_usage()
 		"[-noauto/-auto]\n");
 	return 1;
 }
-
-#include "imports.lst"

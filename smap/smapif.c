@@ -34,7 +34,7 @@ int smap_if_init(smap_state_t *state)
 	thread.option = 0;
 	thread.thread = smap_if_thread;
 	thread.stacksize = 4096;
-	thread.priority = 39;
+	thread.priority = 42;
 	if ((thid = CreateThread(&thread)) < 0) {
 		M_PRINTF("Error: Unable to create interface thread.\n");
 		return 3;
@@ -159,25 +159,16 @@ static err_t smap_if_linkoutput(struct netif *netif, struct pbuf *p)
 	return 0;
 }
 
-static int priority_one(void)
+static int priority_one()
 {
-	iop_thread_info_t thinfo;
-	int res;
-
-	if ((res = ReferThreadStatus(0, &thinfo))) {
-		DPRINTF("ReferThreadStatus returned %d\n", res);
-		return res;
-	}
-
-	ChangeThreadPriority(0, 1);
-	return thinfo.info[IOP_THINFO_PRIORITY];
+	int flags;
+	CpuSuspendIntr(&flags);
+	return flags;
 }
 
 static void priority_reset(int priority)
 {
-	if ((priority - 1) < 126)
-		ChangeThreadPriority(0, priority);
-
+	CpuResumeIntr(priority);
 }
 
 void smap_p_enqueue(struct pbuf **pq, struct pbuf *p)
@@ -195,6 +186,10 @@ void smap_p_enqueue(struct pbuf **pq, struct pbuf *p)
 			;
 		q->next = p;
 	}
+	/* In both cases, the reference count must be incremented so that if
+	   the high-level code gets a chance to free it before smap_transmit()
+	   does, we still have valid data to send.  */
+	pbuf_ref(p);
 
 	priority_reset(oldpri);
 }
@@ -218,13 +213,17 @@ struct pbuf *smap_p_next(struct pbuf **pq)
 
 struct pbuf *smap_p_dequeue(struct pbuf **pq)
 {
-	struct pbuf *head;
+	struct pbuf *head, *q;
 	int oldpri;
 
 	if ((oldpri = priority_one()) < 0)
 		return NULL;
 
-	head = *pq;
+	/* Decrement the refcount on each pbuf (undo smap_p_enqueue()).  */
+	if ((head = *pq)) {
+		for (q = head; q; q = q->next)
+			pbuf_free(q);
+	}
 	*pq = NULL;
 
 	priority_reset(oldpri);

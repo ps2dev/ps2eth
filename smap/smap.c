@@ -419,8 +419,8 @@ static int smap_transmit(smap_state_t *state)
 			break;
 
 		payload = q->payload;
-		DPRINTF("pbuf %p, payload is %p, alen is %d, flags %04x\n",
-				q, payload, alen, q->flags);
+		DPRINTF("pbuf %p, payload %p, ref %d, flags %04x, alen %d\n",
+				q, payload, q->ref, q->flags, alen);
 
 		ptr = SMAP_REG16(SMAP_R_TXFIFO_WR_PTR) + SMAP_TX_BASE;
 		if ((res = smap_dma_transfer(payload, alen, SMAP_DMA_OUT)) > 0)
