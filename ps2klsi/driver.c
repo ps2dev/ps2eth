@@ -513,7 +513,7 @@ int usb_klsi_attach( int deviceID )
   IP4_ADDR( &ipaddr, 172,16,10,254 );
   IP4_ADDR( &netmask, 255,255,255,0 );
   IP4_ADDR( &gw, 172,16,10,40 );
-  netif_add( &ipaddr, &netmask, &gw, klsi_init, tcpip_input );
+  netif_add( &ipaddr, &netmask, &gw, NULL, klsi_init, tcpip_input );
 
 
   DelayThread( 2 * 1000 * 1000 ); 
