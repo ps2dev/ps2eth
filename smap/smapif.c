@@ -1,231 +1,290 @@
 /*
- * smapif.c - High level ps2ip/LwIP interface.
+ * Copyright (c) 2001, Swedish Institute of Computer Science.
+ * All rights reserved. 
  *
- * Copyright (c) 2003 Marcus R. Brown <mrbrown@0xd6.org>
+ * Redistribution and use in source and binary forms, with or without 
+ * modification, are permitted provided that the following conditions 
+ * are met: 
+ * 1. Redistributions of source code must retain the above copyright 
+ *    notice, this list of conditions and the following disclaimer. 
+ * 2. Redistributions in binary form must reproduce the above copyright 
+ *    notice, this list of conditions and the following disclaimer in the 
+ *    documentation and/or other materials provided with the distribution. 
+ * 3. Neither the name of the Institute nor the names of its contributors 
+ *    may be used to endorse or promote products derived from this software 
+ *    without specific prior written permission. 
  *
- * See the file LICENSE, located within this directory, for licensing terms.
+ * THIS SOFTWARE IS PROVIDED BY THE INSTITUTE AND CONTRIBUTORS ``AS IS'' AND 
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE INSTITUTE OR CONTRIBUTORS BE LIABLE 
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL 
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS 
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) 
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT 
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY 
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+ * SUCH DAMAGE. 
+ *
+ * This file is part of the lwIP TCP/IP stack.
+ * 
+ * Author: Adam Dunkels <adam@sics.se>
+ *
+ * $Id$
  */
 
+#include "lwip/ip.h"
+#include "lwip/pbuf.h"
+
+#include "netif/etharp.h"
+#include "sysclib.h"
 #include "smap.h"
+#include <kernel.h>
+#include <timer.h>
 
-extern err_t tcpip_input(struct pbuf *p, struct netif *inp);
-
-static err_t smap_if_start(struct netif *netif);
-static err_t smap_if_output(struct netif *netif, struct pbuf *p, struct ip_addr *ipaddr);
-static err_t smap_if_linkoutput(struct netif *netif, struct pbuf *p);
-
-static void smap_if_thread(void *arg);
-
-int smap_if_init(smap_state_t *state)
-{
-	iop_thread_t thread;
-	iop_event_t event;
-	struct netif *netif;
-	int thid;
-
-	event.attr = 0;
-	event.bits = 0;
-	if ((state->if_evflg = CreateEventFlag(&event)) < 0) {
-		M_PRINTF("Error: Couldn't create interface event flag.\n");
-		return 2;
-	}
-
-	thread.attr = TH_C;
-	thread.option = 0;
-	thread.thread = smap_if_thread;
-	thread.stacksize = 4096;
-	thread.priority = 42;
-	if ((thid = CreateThread(&thread)) < 0) {
-		M_PRINTF("Error: Unable to create interface thread.\n");
-		return 3;
-	}
-	if (StartThread(thid, state) < 0) {
-		M_PRINTF("Error: Couldn't execute interface thread.\n");
-		return 4;
-	}
-
-	if (!(netif = netif_add(&smap_ip, &smap_sm, &smap_gw, state,
-				smap_if_start, tcpip_input))) {
-		M_PRINTF("Couldn't add SMAP interface to ps2ip.\n");
-		return 5;
-	}
-
-	netif_set_default(netif);
-	return 0;
-}
-
-void smap_if_input(smap_state_t *state)
-{
-	struct netif *netif = state->netif;
-	struct eth_hdr *eth_hdr;
-	struct pbuf *p = smap_p_dequeue(&state->rxq);
-
-	DPRINTF("enter, p is %p\n", p);
-	eth_hdr = p->payload;
-	switch (htons(eth_hdr->type)) {
-		case ETHTYPE_IP:
-			DPRINTF("IP\n");
-			etharp_ip_input(netif, p);
-			pbuf_header(p, -14);
-			netif->input(p, netif);
-			break;
-		case ETHTYPE_ARP:
-			DPRINTF("ARP\n");
-			etharp_arp_input(state->netif, &state->eth_addr, p);
-			break;
-		default:
-			pbuf_free(p);
-			break;
-	}
-	DPRINTF("exit\n");
-}
-
-static u32 etharp_alarm_cb(void *arg)
-{
-	iSetEventFlag(smap_state.if_evflg, SMAP_IF_EVENT_ARP);
-	return *(u32 *)arg;
-}
-
-void smap_if_thread(void *arg)
-{
-	iop_sys_clock_t arp_timer;
-	smap_state_t *state = (smap_state_t *)arg;
-	u32 bits;
-	int res, arp_init = 0;
-
-	while (1) {
-		if ((res = WaitEventFlag(state->if_evflg, SMAP_IF_EVENT_ALL, 0x11, &bits)))
-			break;
-
-		/* Packet(s) received.  */
-		if (bits & SMAP_IF_EVENT_RECV)
-			smap_if_input(state);
-
-		/* ARP timer expired.  */
-		if (bits & SMAP_IF_EVENT_ARP)
-			etharp_tmr();
-
-		/* The device has finished initialization.  */
-		if (bits & SMAP_IF_EVENT_INCPL) {
-			DPRINTF("Got init completion event.\n");
-
-			/* Initialize the ARP interface.  */
-			if (!arp_init) {
-				etharp_init();
-				USec2SysClock(ARP_TMR_INTERVAL * 1000, &arp_timer);
-				SetAlarm(&arp_timer, etharp_alarm_cb, &arp_timer.lo);
-				arp_init = 1;
-			}
-		}
-
-	}
-	DPRINTF("WaitEventFlag returned %d\n", res);
-}
-
-static err_t smap_if_start(struct netif *netif)
-{
-	smap_state_t *state = (smap_state_t *)netif->state;
-
-	/* Setup the network interface.  */
-	state->netif = netif;
-	netif->output = smap_if_output;
-	netif->linkoutput = smap_if_linkoutput;
-	netif->name[0] = 's';
-	netif->name[1] = 'm';
-
-	/* Copy the MAC address (we have this from smap_reset()) */
-	netif->hwaddr_len = 6;
-	memcpy(netif->hwaddr, &state->eth_addr, netif->hwaddr_len);
-
-	/* Start the SMAP device.  */
-	SetEventFlag(state->evflg, SMAP_EVENT_INIT);
-	return 0;
-}
-
-static err_t smap_if_output(struct netif *netif, struct pbuf *p, struct ip_addr *ipaddr)
-{
-	if ((p = etharp_output(netif, ipaddr, p)))
-		return smap_if_linkoutput(netif, p);
-
-	return 0;
-}
-
-static err_t smap_if_linkoutput(struct netif *netif, struct pbuf *p)
-{
-	smap_state_t *state = (smap_state_t *)netif->state;
-
-	smap_p_enqueue(&state->txq, p);
-	SetEventFlag(state->evflg, SMAP_EVENT_TX);
-	return 0;
-}
-
-static int priority_one()
-{
-	int flags;
-	CpuSuspendIntr(&flags);
-	return flags;
-}
-
-static void priority_reset(int priority)
-{
-	CpuResumeIntr(priority);
-}
-
-void smap_p_enqueue(struct pbuf **pq, struct pbuf *p)
+/*
+void dump_pbuf(struct pbuf *p, char *function)
 {
 	struct pbuf *q;
-	int oldpri;
 
-	if ((oldpri = priority_one()) < 0)
-		return;
+	printf("[%s] dump thread = %d\n", function, GetThreadId());
 
-	if (!(*pq)) {
-		*pq = p;
-	} else {
-		for (q = *pq; q->next != NULL; q = q->next)
-			;
-		q->next = p;
-	}
-	/* In both cases, the reference count must be incremented so that if
-	   the high-level code gets a chance to free it before smap_transmit()
-	   does, we still have valid data to send.  */
-	pbuf_ref(p);
-
-	priority_reset(oldpri);
+	for(q = p; q != NULL; q = q->next)
+		printf("[%s] pbuf = 0x%X, payload = 0x%X, next = 0x%X, len = %d, tot_len = %d, flags = %d, ref = %d\n", function, p, q->payload, q->next, q->len, q->tot_len, q->flags, q->ref);
 }
+*/
 
-struct pbuf *smap_p_next(struct pbuf **pq)
+extern int ArpMutex;
+
+#define IFNAME0 's'
+#define IFNAME1 'm'
+
+static const struct eth_addr ethbroadcast = {{0xff,0xff,0xff,0xff,0xff,0xff}};
+
+struct smapif {
+    struct eth_addr *ethaddr;
+    /* Add whatever per-interface state that is needed here. */
+};
+
+struct smapif smap_etherif;
+
+static struct netif *this_netif;
+
+/* Forward declarations. */
+static void  smapif_input(struct netif *netif, char*buf, int len);
+static err_t smapif_output(struct netif *netif, struct pbuf *p,
+			       struct ip_addr *ipaddr);
+
+/*
+ * This is called when data is read from the driver
+ * (wrapper so smap wont need to know about netif)
+ */
+void low_level_input(char *buf, int len)
 {
-	struct pbuf *head;
-	int oldpri;
-
-	if ((oldpri = priority_one()) < 0)
-		return NULL;
-
-	if ((head = *pq)) {
-		*pq = head->next;
-		head->next = NULL;
-	}
-
-	priority_reset(oldpri);
-	return head;
+	smapif_input((struct netif*)this_netif,buf,len);	
 }
 
-struct pbuf *smap_p_dequeue(struct pbuf **pq)
+// External func
+extern void enableDev9Intr(void);
+
+static void
+low_level_init(struct netif *netif)
 {
-	struct pbuf *head, *q;
-	int oldpri;
+  struct smapif *smapif;
 
-	if ((oldpri = priority_one()) < 0)
-		return NULL;
+  smapif = netif->state;
+  netif->hwaddr_len = 6;
 
-	/* Decrement the refcount on each pbuf (undo smap_p_enqueue()).  */
-	if ((head = *pq)) {
-		for (q = head; q; q = q->next)
-			pbuf_free(q);
-	}
-	*pq = NULL;
-
-	priority_reset(oldpri);
-	return head;
+  /* Get MAC address */
+  memcpy((unsigned char *)smapif->ethaddr, smap_get_mac(), 6);
+  //  smap_get_mac_address((unsigned char *)smapif->ethaddr->addr);
+#if 0
+  printf("MAC address : %02X:%02X:%02X:%02X:%02X:%02X\n",
+		  (unsigned char)(smapif->ethaddr->addr[0]),	
+		  (unsigned char)(smapif->ethaddr->addr[1]),	
+		  (unsigned char)(smapif->ethaddr->addr[2]),	
+		  (unsigned char)(smapif->ethaddr->addr[3]),	
+		  (unsigned char)(smapif->ethaddr->addr[4]),	
+		  (unsigned char)(smapif->ethaddr->addr[5]));
+#endif  
+  enableDev9Intr();
+  printf("smap: dev9 interrupt enabled...\n");
+  smap_start();
 }
+
+/*
+ * low_level_output():
+ *
+ * Should do the actual transmission of the packet. The packet is
+ * contained in the pbuf that is passed to the function. This pbuf
+ * might be chained.
+ */
+
+static err_t
+low_level_output(struct netif *netif, struct pbuf *p)
+{
+#if 0
+    struct pbuf *q;
+    char buf[1600];
+    char *bufptr;
+  
+    /* initiate transfer(); */
+    bufptr = &buf[0];
+  
+    for(q = p; q != NULL; q = q->next) {
+        /* Send the data from the pbuf to the interface, one pbuf at a
+           time. The size of the data in each pbuf is kept in the ->len
+           variable. */    
+        /* send data from(q->payload, q->len); */
+        bcopy(q->payload, bufptr, q->len);
+        bufptr += q->len;
+    }
+    
+    /* signal that packet should be sent(); */
+    smap_send(buf, p->tot_len);
+#else
+    // Moved pbuf handling to smap_send() (eliminating one set of memcpy's)
+    smap_send(p, p->tot_len);
+#endif
+    return 0;
+}
+
+/*----------------------------------------------------------------------*/
+/*
+ * smapif_output():
+ *
+ * This function is called by the TCP/IP stack when an IP packet
+ * should be sent. It calls the function called low_level_output() to
+ * do the actuall transmission of the packet.
+ *
+ */
+/*----------------------------------------------------------------------*/
+static err_t
+smapif_output(struct netif *netif, struct pbuf *p,
+		  struct ip_addr *ipaddr)
+{
+
+	WaitSema(ArpMutex);
+    p = etharp_output(netif, ipaddr, p);
+	SignalSema(ArpMutex);
+
+    if(p != NULL)
+        return low_level_output(netif, p);
+
+    return 0;
+}
+
+
+/*
+ * smapif_input():
+ * This function is called when the driver has
+ * has some data to pass up to lwIP.
+ * It does it through lwip_input.
+ */
+
+static void
+smapif_input(struct netif *netif, char * bufptr, int len)
+{
+    struct smapif *smapif;
+    struct eth_hdr *ethhdr;
+    struct pbuf *p, *q;
+
+    smapif = netif->state;
+    /* We allocate a pbuf chain of pbufs from the pool. */
+    p = pbuf_alloc(PBUF_LINK, len, PBUF_POOL);
+  
+    if(p != NULL) {
+        /* We iterate over the pbuf chain until we have read the entire
+           packet into the pbuf. */
+        for(q = p; q != NULL; q = q->next) {
+            /* Read enough bytes to fill this pbuf in the chain. The
+               avaliable data in the pbuf is given by the q->len
+               variable. */
+            /* read data into(q->payload, q->len); */
+            bcopy(bufptr, q->payload, q->len);
+            bufptr += q->len;
+        }
+        /* acknowledge that packet has been read(); */
+    } else {
+        /* drop packet(); */
+    }
+
+    if(p == NULL) {
+        dbgprintf("smapif_input: low_level_input returned NULL\n");
+        return;
+    }
+    ethhdr = p->payload;
+
+    switch(htons(ethhdr->type)) {
+    case ETHTYPE_IP:
+        dbgprintf("smapif_input: IP packet\n");
+		WaitSema(ArpMutex);
+        etharp_ip_input(netif, p);
+		SignalSema(ArpMutex);
+        pbuf_header(p, -14);
+#ifdef LWIP_DEBUG    
+//        if(ip_lookup(p->payload, netif)) {
+#endif	    
+            netif->input(p, netif);
+#ifdef LWIP_DEBUG    
+//        } else {
+//            printf("smapif_input: lookup failed!\n");
+//        }
+#endif	    
+        break;
+    case ETHTYPE_ARP:
+        dbgprintf("smapif_input: ARP packet\n");
+		WaitSema(ArpMutex);
+		etharp_arp_input(netif, smapif->ethaddr, p);
+		SignalSema(ArpMutex);
+        break;
+    default:
+        pbuf_free(p);
+        break;
+    }
+}
+/*----------------------------------------------------------------------*/
+
+static struct timestamp clock_ticks;
+
+/*----------------------------------------------------------------------*/
+static unsigned int
+arp_timer(void *arg)
+{
+  WaitSema(ArpMutex);
+  etharp_tmr();
+  SignalSema(ArpMutex);
+  return (unsigned int)arg;
+}
+/*----------------------------------------------------------------------*/
+/*
+ * smapif_init():
+ *
+ * Should be called at the beginning of the program to set up the
+ * network interface. It calls the function low_level_init() to do the
+ * actual setup of the hardware.
+ *
+ */
+/*----------------------------------------------------------------------*/
+void
+smapif_init(struct netif *netif)
+{
+  struct smapif *smapif;
+
+  this_netif = netif;  
+  smapif = &smap_etherif;
+  netif->state = smapif;
+  netif->name[0] = IFNAME0;
+  netif->name[1] = IFNAME1;
+  netif->output = smapif_output;
+  netif->linkoutput = low_level_output;
+  
+  smapif->ethaddr = (struct eth_addr *)&(netif->hwaddr[0]);
+
+  low_level_init(netif);
+  etharp_init();
+  
+  USec2SysClock(ARP_TMR_INTERVAL * 1000, &clock_ticks);
+  SetAlarm(&clock_ticks, arp_timer, clock_ticks.clk);
+}
+/*----------------------------------------------------------------------*/
