@@ -44,6 +44,12 @@ typedef unsigned char u_int8_t;
 
 #include "types.h"
 
+#ifdef DEBUG
+#define dbgprintf(args...) printf(args)
+#else
+#define dbgprintf(args...)  do { } while(0)
+#endif
+
 
 /*
  * SMAP control structure(smap channel)

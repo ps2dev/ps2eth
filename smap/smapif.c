@@ -33,16 +33,10 @@
  * $Id$
  */
 
-#include "lwip/debug.h"
-
-#include "lwip/opt.h"
-#include "lwip/def.h"
 #include "lwip/ip.h"
-#include "lwip/mem.h"
 #include "lwip/pbuf.h"
-#include "lwip/sys.h"
 
-#include "etharp.h"
+#include "netif/etharp.h"
 #include "sysclib.h"
 #include "smap.h"
 #include <kernel.h>
@@ -61,8 +55,6 @@ void dump_pbuf(struct pbuf *p, char *function)
 */
 
 extern int ArpMutex;
-
-#define SMAPIF_DEBUG 0
 
 #define IFNAME0 's'
 #define IFNAME1 'm'
@@ -153,7 +145,7 @@ low_level_output(struct netif *netif, struct pbuf *p)
     // Moved pbuf handling to smap_send() (eliminating one set of memcpy's)
     smap_send(p, p->tot_len);
 #endif
-    return ERR_OK;
+    return 0;
 }
 
 /*----------------------------------------------------------------------*/
@@ -178,7 +170,7 @@ smapif_output(struct netif *netif, struct pbuf *p,
     if(p != NULL)
         return low_level_output(netif, p);
 
-    return ERR_OK;
+    return 0;
 }
 
 
@@ -217,14 +209,14 @@ smapif_input(struct netif *netif, char * bufptr, int len)
     }
 
     if(p == NULL) {
-        DEBUGF(SMAPIF_DEBUG, ("smapif_input: low_level_input returned NULL\n"));
+        dbgprintf("smapif_input: low_level_input returned NULL\n");
         return;
     }
     ethhdr = p->payload;
 
     switch(htons(ethhdr->type)) {
     case ETHTYPE_IP:
-        DEBUGF(SMAPIF_DEBUG, ("smapif_input: IP packet\n"));
+        dbgprintf("smapif_input: IP packet\n");
 		WaitSema(ArpMutex);
         etharp_ip_input(netif, p);
 		SignalSema(ArpMutex);
@@ -240,7 +232,7 @@ smapif_input(struct netif *netif, char * bufptr, int len)
 #endif	    
         break;
     case ETHTYPE_ARP:
-        DEBUGF(SMAPIF_DEBUG, ("smapif_input: ARP packet\n"));
+        dbgprintf("smapif_input: ARP packet\n");
 		WaitSema(ArpMutex);
 		etharp_arp_input(netif, smapif->ethaddr, p);
 		SignalSema(ArpMutex);

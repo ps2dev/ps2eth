@@ -18,11 +18,6 @@
 
 //#define DEBUG
 
-#ifdef DEBUG
-#define dbgprintf(args...) printf(args)
-#else
-#define dbgprintf(args...)  do { } while(0)
-#endif
 
 
 #define PS2SPD_PIO_DIR  0xb000002c
