@@ -4,39 +4,22 @@
 #
 #  ------------------------------------------------------------------------
 
-include ../Makefile.pref
-include ../Makefile.global
+TOPDIR = ..
+
+IOP_BIN = ../bin/ps2klsi.irx
+IOP_OBJS = driver.o ps2eth.o
+
+IOP_LDFLAGS += -L$(PS2IP)/iop/lib
+IOP_LIBS += -liop_ps2ip -llwip_common
 
 
-#  ------------------------------------------------------------------------
-#  PROJECTS TO BUILD
-
-all: ps2klsi.irx
-	cp ps2klsi.irx ../bin
-
+all: $(IOP_BIN)
 
 clean:
-	rm -f *.irx *.o
+	-rm -f *.o
 
+include $(TOPDIR)/Makefile.pref
+include $(TOPDIR)/Makefile.global
 
-#  ------------------------------------------------------------------------
-#  PS2KLSI.IRX BUILD INSTRUCTIONS
-
-ps2klsi_LDFLAGS = -L$(PS2LIB)/iop/lib -L$(PS2IP)/iop/lib
-ps2klsi_LDADD =  -liop_ps2ip -lkernel
-ps2klsi_OBJECTS = driver.o etharp.o ps2eth.o
-
-
-ps2klsi.irx: $(ps2klsi_OBJECTS) 
-	$(IOPLINK) $(ps2klsi_OBJECTS) $(ps2klsi_LDFLAGS) $(ps2klsi_LDADD) -o $@
-
-driver.o: driver.c
-	$(IOPCOMPILE) -o $@ -c $<
-
-etharp.o: $(LWIP)/src/netif/etharp.c
-	$(IOPCOMPILE) -o $@ -c $<
-
-ps2eth.o: ps2eth.c
-	$(IOPCOMPILE) -o $@ -c $<
-
-
+include $(PS2LIB)/Makefile.pref
+include $(PS2LIB)/Makefile.iopglobal

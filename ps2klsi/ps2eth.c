@@ -13,13 +13,10 @@
   the Kawasaki chipset.  There isn't too many changes here.
 */
 
-#include "lwip/debug.h"
+#include <tamtypes.h>
+#include <thbase.h>
 
-#include "lwip/opt.h"
-#include "lwip/def.h"
-#include "lwip/mem.h"
 #include "lwip/pbuf.h"
-#include "lwip/sys.h"
 
 #include "netif/etharp.h"
 
@@ -161,7 +158,7 @@ low_level_output(struct ethernetif *ethernetif, struct pbuf *p)
 
   kue_do_transfer( ethernetif->hout, ethernetif->hsemout, outbuffer, p->tot_len+2 ); 
 
-  return ERR_OK;
+  return 0;
 }
 /*-----------------------------------------------------------------------------------*/
 /*
@@ -224,7 +221,7 @@ ethernetif_output(struct netif *netif, struct pbuf *p,
   if ( p!= NULL ) {
      return low_level_output( netif->state, p );
   }
-  return ERR_OK;
+  return 0;
 
 }
 /*-----------------------------------------------------------------------------------*/

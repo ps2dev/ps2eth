@@ -1,12 +1,14 @@
 
 
+#include <tamtypes.h>
+#include <thsemap.h>
 
 struct ethernetif
 {
   struct eth_addr * ethaddr;
-  u8_t  epin;    // End Point of bulk in.
-  u8_t  epout;   // End Point of bulk out.
-  u8_t  epint;   // End Point of interrupt.  Not used.
+  u8    epin;    // End Point of bulk in.
+  u8    epout;   // End Point of bulk out.
+  u8    epint;   // End Point of interrupt.  Not used.
   int   hcontrol;  // handle to control endpoint 0.
   int   hin;       // handle to bulk in.
   int   hout;      // handle to bulk out.
