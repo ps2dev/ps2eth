@@ -30,8 +30,11 @@ typedef unsigned int u_int32_t;
 
 #define ETHER_ADDR_LEN 6
 
-#define K_IDVENDOR 0x846
-#define K_IDPRODUCT 0x1001
+#define NETGEAR_IDVENDOR  0x0846
+#define NETGEAR_IDPRODUCT 0x1001
+
+#define THREECOM_IDVENDOR  0x0565
+#define THREECOM_IDPRODUCT 0x0002
 
 #define BUFLEN 1000
 
@@ -382,8 +385,9 @@ extern err_t tcpip_input(struct pbuf *p, struct netif *inp);
  * usb_klsi_prob - PS2 USB specific function.  This is called when
  *   a device is attached.  If this driver recognises the device then
  *   it should return true.  Currently this only recognises the 
- *   NetGear EA101 Ethernet Adapter.  This driver should however work
- *   with a number of different Kawasaki chipsets.
+ *   NetGear EA101 Ethernet Adapter or the 3COM USB Ethernet Adapter.
+ *   This driver should however work with a number of different USB
+ *   NICs using the Kawasaki chipset.
  */ 
 
 int usb_klsi_probe( int deviceID )
@@ -398,11 +402,21 @@ int usb_klsi_probe( int deviceID )
 
   if ( device != NULL )
   {
-     if ( device->idVendor == K_IDVENDOR && 
-          device->idProduct == K_IDPRODUCT )
+	 printf("Found USB Device ... VID=0x%04X PID=0x%04X\n",
+		 device->idVendor,device->idProduct);
+
+     if ( (device->idVendor == NETGEAR_IDVENDOR) && 
+          (device->idProduct == NETGEAR_IDPRODUCT) )
      {
          returnvalue = 1;
      }
+
+	 if ( (device->idVendor == THREECOM_IDVENDOR) && 
+          (device->idProduct == THREECOM_IDPRODUCT) )
+     {
+         returnvalue = 1;
+     }
+
   }
   return returnvalue;
 }
@@ -506,13 +520,7 @@ int usb_klsi_attach( int deviceID )
 
   klsi_etherif.hout = UsbOpenBulkEndpoint( global, &(eds[klsi_etherif.epout]) );
 
-  // Everything is now setup.
-  // Now configure this for tcpip.
-  // Static IP configuration..  needs to be fixed.
-
-  IP4_ADDR( &ipaddr, 172,16,10,254 );
-  IP4_ADDR( &netmask, 255,255,255,0 );
-  IP4_ADDR( &gw, 172,16,10,40 );
+  // ipaddr, netmask, and gw now setup in _start from argv
   netif_add( &ipaddr, &netmask, &gw, NULL, klsi_init, tcpip_input );
 
 
@@ -538,6 +546,43 @@ int usb_klsi_detach( int deviceID )
   return -1;
 }
 
+unsigned int
+inet_addr(char *str)
+{
+    char *cp;
+    char c;
+    unsigned int val;
+    int part;
+    unsigned int address;
+
+
+    cp = str;
+    val = 0;
+    part = 0;
+    address = 0;
+
+    while ((c = *cp) != '\0') {
+        // hm, should fix ctype_table stuff (isdigit for example)
+        if ((c >= '0') && (c <= '9')) {
+            val = (val * 10) + (c - '0');
+            cp++;
+            continue;
+        }
+        if (*cp == '.')
+        {
+            if ((part >= 3) || (val > 255)) {
+                // Illegal
+                return -1;
+            }
+            address |= val << (part * 8);
+            part++;
+            cp++;
+            val = 0;
+        }
+    }
+    address |= val << (part * 8);
+    return address ;
+}
 
 UsbDriver usb_probe_ops  __attribute__((aligned(64)));
 
@@ -550,6 +595,19 @@ int _start( int argc, char **argv)
 
    printf( "USB KLSI Driver\n" );
 
+   if (argc == 4) {
+       printf("USB NIC: %s %s %s\n", argv[1], argv[2], argv[3]);
+       ipaddr.addr = inet_addr(argv[1]);
+       netmask.addr = inet_addr(argv[2]);
+       gw.addr = inet_addr(argv[3]);
+   }
+   else
+   {
+       // Set some defaults
+       IP4_ADDR(&ipaddr, 192,168,0,80 );
+       IP4_ADDR(&netmask, 255,255,255,0 );
+       IP4_ADDR(&gw, 192,168,0,1);
+   }
 
    usb_probe_ops.name = "klsi";
    usb_probe_ops.probe = usb_klsi_probe;
@@ -561,6 +619,7 @@ int _start( int argc, char **argv)
    { 
       printf( "RegisterLdd returned %i\n", ret );
    }
+
 
    return 0;
 } 
