@@ -7,7 +7,7 @@
 TOPDIR = ..
 
 IOP_BIN = ../bin/ps2smap.irx
-IOP_OBJS = smap.o smapif.o main.o iop_ps2dev9.s
+IOP_OBJS = smap.o smapif.o main.o iop_ps2dev9.o
 
 IOP_LDFLAGS += -L$(PS2IP)/iop/lib -s
 IOP_LIBS += -liop_ps2ip -llwip_common

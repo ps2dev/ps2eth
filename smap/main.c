@@ -18,10 +18,6 @@
 #include <lwip/netif.h>
 #include "smap.h"
 
-//#define DEBUG
-
-
-
 #define PS2SPD_PIO_DIR  0xb000002c
 #define PS2SPD_PIO_DATA 0xb000002e
 
@@ -283,7 +279,10 @@ smapthread(void *arg)
     smap_init();
     dbgprintf("smap: initialized, starting...\n");
 
+#ifndef PS2DRV_COMPAT
     installPowerOffHandler();
+#endif
+
     // Moved to low_level_init() in smapif.c
     //    enableDev9Intr();
     //    printf("smap: dev9 interrupt enabled...\n");
@@ -402,6 +401,9 @@ _start( int argc, char **argv)
 
 
    printf("SMAP: argc %d\n", argc);
+
+   if (argc>4)argc=4;
+
    // Parse ip args.. all args or nuthing w/o real error checking..
    // We really should fix this to some ip= netmask= gw=
    if (argc == 4) {

@@ -579,9 +579,11 @@ smap_interrupt_XXable(struct smap_chan *smap, int enable_flag)
 	if (enable_flag) {
 		/* enable interrupt */
 		dev9IntrEnable(INTR_ENA_ALL);
+		EMAC3REG_WRITE(smap, SMAP_EMAC3_INTR_ENABLE, E3_INTR_ALL);
 	} else {
 		/* disable interrupt */
 		dev9IntrDisable(INTR_ENA_ALL);
+		EMAC3REG_WRITE(smap, SMAP_EMAC3_INTR_ENABLE, 0);
 	}
 #else
 	if (enable_flag) {
@@ -1578,7 +1580,9 @@ bool smap_init()
 	// debugging
     //    smap->flags = SMAP_F_PRINT_MSG | SMAP_F_PRINT_PKT;
     //    smap->flags = SMAP_F_PRINT_MSG;// | SMAP_F_PRINT_PKT;
-
+#ifdef DEBUG
+        smap->flags = SMAP_F_PRINT_MSG;// | SMAP_F_PRINT_PKT;
+#endif
 	smap_base_init(smap);
 	r = smap_get_node_addr(smap);
 	if (r < 0)
@@ -1771,9 +1775,11 @@ smap_intr_interrupt_XXable(int enable_flag)
 	if (enable_flag) {
 		/* enable interrupt */
 		dev9IntrEnable(INTR_ENA_ALL);
+	      EMAC3REG_WRITE(smap, SMAP_EMAC3_INTR_ENABLE, E3_INTR_ALL);
 	} else {
 		/* disable interrupt */
 		dev9IntrDisable(INTR_ENA_ALL);
+	      EMAC3REG_WRITE(smap, SMAP_EMAC3_INTR_ENABLE, 0);
 	}
 #else
     CpuSuspendIntr(&oldIntr);

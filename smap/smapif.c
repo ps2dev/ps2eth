@@ -98,7 +98,7 @@ low_level_init(struct netif *netif)
   /* Get MAC address */
   memcpy((unsigned char *)smapif->ethaddr, smap_get_mac(), 6);
   //  smap_get_mac_address((unsigned char *)smapif->ethaddr->addr);
-#if 0
+#if 1
   printf("MAC address : %02X:%02X:%02X:%02X:%02X:%02X\n",
 		  (unsigned char)(smapif->ethaddr->addr[0]),	
 		  (unsigned char)(smapif->ethaddr->addr[1]),	
@@ -285,6 +285,6 @@ smapif_init(struct netif *netif)
   etharp_init();
   
   USec2SysClock(ARP_TMR_INTERVAL * 1000, &clock_ticks);
-  SetAlarm(&clock_ticks, arp_timer, clock_ticks.clk);
+  SetAlarm(&clock_ticks, arp_timer, (void *)clock_ticks.clk);
 }
 /*----------------------------------------------------------------------*/

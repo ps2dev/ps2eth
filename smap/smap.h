@@ -42,6 +42,8 @@ typedef unsigned int u_int32_t;
 typedef unsigned short u_int16_t;
 typedef unsigned char u_int8_t;
 
+//#define DEBUG
+
 #include "types.h"
 
 #ifdef DEBUG
@@ -134,10 +136,7 @@ struct smap_chan {
 #define	  SMAP_BD_SIZE			512
 #define	  SMAP_BD_MAX_ENTRY		64
 
-#define	SMAP_BD_NEXT(x)	{				\
-	if ((x) == (SMAP_BD_MAX_ENTRY-1)) (x) = 0;	\
-	else (x)++;					\
-}
+#define	SMAP_BD_NEXT(x)	{if ((x) == (SMAP_BD_MAX_ENTRY-1)) (x) = 0;else (x)++;}
 
 /* TX Control */
 #define	SMAP_BD_TX_READY	(1<<15)	/* set:driver, clear:HW */
@@ -234,21 +233,15 @@ struct smapbd {
 #define	  FIFO_DATA_SWAP	(1<<0)
 #define	SMAP_FIFO_DATA			0x1308
 
-#define	SMAPREG8(dev, offset)	\
-	(*(volatile u_int8_t *)((dev)->base + (offset)))
-#define	SMAPREG16(dev, offset)	\
-	(*(volatile u_int16_t *)((dev)->base + (offset)))
-#define	SMAPREG32(dev, offset)	\
-	(*(volatile u_int32_t *)((dev)->base + (offset)))
+#define	SMAPREG8(dev, offset)	(*(volatile u_int8_t *)((dev)->base + (offset)))
+#define	SMAPREG16(dev, offset)	(*(volatile u_int16_t *)((dev)->base + (offset)))
+#define	SMAPREG32(dev, offset)	(*(volatile u_int32_t *)((dev)->base + (offset)))
 
 #define	SMAP_EEPROM_WRITE_WAIT	100000
 #define	SMAP_PP_GET_Q(dev)	((SMAPREG8((dev), SMAP_PIOPORT_IN) >> 4) & 1)
 #define	SMAP_PP_SET_D(dev, d)	((dev)->ppwc = (d)?((dev)->ppwc | PP_DIN):((dev)->ppwc & ~PP_DIN))
 #define	SMAP_PP_SET_S(dev, s)	((dev)->ppwc = (s)?((dev)->ppwc | PP_CSEL):((dev)->ppwc & ~PP_CSEL))
-#define	SMAP_PP_CLK_OUT(dev, c)	{ \
-	(dev)->ppwc = (c)?((dev)->ppwc | PP_SCLK):((dev)->ppwc & ~PP_SCLK); \
-	SMAPREG8((dev), SMAP_PIOPORT_OUT) = (dev)->ppwc; \
-}
+#define	SMAP_PP_CLK_OUT(dev, c)	{ (dev)->ppwc = (c)?((dev)->ppwc | PP_SCLK):((dev)->ppwc & ~PP_SCLK); SMAPREG8((dev), SMAP_PIOPORT_OUT) = (dev)->ppwc; }
 
 /*
  * EMAC3 Register Offset and Definitions
@@ -342,18 +335,8 @@ struct smapbd {
 #define	  E3_INTR_TX_ERR_1	(1<<3)
 #define	  E3_INTR_MMAOP_SUCCESS	(1<<1)
 #define	  E3_INTR_MMAOP_FAIL	(1<<0)
-#define	  E3_INTR_ALL		(E3_INTR_OVERRUN|E3_INTR_PF|E3_INTR_BAD_FRAME| \
-				 E3_INTR_RUNT_FRAME|E3_INTR_SHORT_EVENT| \
-				 E3_INTR_ALIGN_ERR|E3_INTR_BAD_FCS| \
-				 E3_INTR_TOO_LONG|E3_INTR_OUT_RANGE_ERR| \
-				 E3_INTR_IN_RANGE_ERR| \
-				 E3_INTR_DEAD_DEPEND|E3_INTR_DEAD_0| \
-				 E3_INTR_SQE_ERR_0|E3_INTR_TX_ERR_0| \
-				 E3_INTR_DEAD_1|E3_INTR_SQE_ERR_1| \
-				 E3_INTR_TX_ERR_1| \
-				 E3_INTR_MMAOP_SUCCESS|E3_INTR_MMAOP_FAIL)
-#define	  E3_DEAD_ALL		(E3_INTR_DEAD_DEPEND|E3_INTR_DEAD_0| \
-				 E3_INTR_DEAD_1)
+#define	  E3_INTR_ALL		(E3_INTR_OVERRUN|E3_INTR_PF|E3_INTR_BAD_FRAME| E3_INTR_RUNT_FRAME|E3_INTR_SHORT_EVENT| E3_INTR_ALIGN_ERR|E3_INTR_BAD_FCS| E3_INTR_TOO_LONG|E3_INTR_OUT_RANGE_ERR| E3_INTR_IN_RANGE_ERR| E3_INTR_DEAD_DEPEND|E3_INTR_DEAD_0| E3_INTR_SQE_ERR_0|E3_INTR_TX_ERR_0| E3_INTR_DEAD_1|E3_INTR_SQE_ERR_1| E3_INTR_TX_ERR_1| E3_INTR_MMAOP_SUCCESS|E3_INTR_MMAOP_FAIL)
+#define	  E3_DEAD_ALL		(E3_INTR_DEAD_DEPEND|E3_INTR_DEAD_0| E3_INTR_DEAD_1)
 
 #define	SMAP_EMAC3_ADDR_HI		(SMAP_EMAC3_BASE + 0x1C)
 #define	SMAP_EMAC3_ADDR_LO		(SMAP_EMAC3_BASE + 0x20)
@@ -452,8 +435,7 @@ static inline void EMAC3REG_WRITE(struct smap_chan *dev, u_int32_t offset, u_int
 #define	  PHY_IDR1_VAL	(((NS_OUI<<2)>>8)&0xffff)
 #define	DsPHYTER_PHYIDR2	0x03
 #define	  PHY_IDR2_VMDL	0x2		/* Vendor MoDeL number */
-#define	  PHY_IDR2_VAL	\
-		(((NS_OUI<<10)&0xFC00)|((PHY_IDR2_VMDL<<4)&0x3F0))
+#define	  PHY_IDR2_VAL	(((NS_OUI<<10)&0xFC00)|((PHY_IDR2_VMDL<<4)&0x3F0))
 #define	  PHY_IDR2_MSK	0xFFF0
 
 #define	DsPHYTER_ANAR		0x04

@@ -11,12 +11,12 @@
 	.set	noreorder
 
 
-	.local	exp_stub
-exp_stub:
+	.local	dev9_stub
+dev9_stub:
 	.word	0x41e00000
 	.word	0
 	.word	0x00000101
-	.ascii	"dev9\0\0\0\0\0"
+	.ascii	"dev9\0\0\0\0"
 	.align	2
 
 	.globl	dev9RegisterIntrCb				# 004
