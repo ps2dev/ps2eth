@@ -106,7 +106,7 @@ static int
 detectAndInitDev9(void)
 {
 #ifdef PS2DRV_COMPAT
-    // this is done for us, by loading ps2dev9
+    // shortened version, as some is done by ps2dev9
 
     unsigned short temp16;
     unsigned int oldint;
