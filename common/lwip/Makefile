@@ -12,5 +12,5 @@ clean:
 include $(TOPDIR)/Makefile.pref
 include $(TOPDIR)/Makefile.global
 
-include $(PS2LIB)/Makefile.pref
-include $(PS2LIB)/Makefile.iopglobal
+include $(PS2SDK)/samples/Makefile.pref
+include $(PS2SDK)/samples/Makefile.iopglobal
