@@ -46,6 +46,7 @@
 #include "sysclib.h"
 #include "smap.h"
 #include <kernel.h>
+#include <timer.h>
 
 /*
 void dump_pbuf(struct pbuf *p, char *function)

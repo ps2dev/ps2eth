@@ -11,6 +11,7 @@
 #include <thevent.h>
 #include <thsemap.h>
 #include <vblank.h>
+#include <timer.h>
 
 #include <lwip/netif.h>
 #include "smap.h"
