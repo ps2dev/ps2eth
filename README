@@ -12,7 +12,10 @@ CURRENT DRIVERS
 
 ps2klsi - This driver is for USB attached Kawasaki chipset ethernet 
           adapters.  This currently only recognises the NetGear EA101
-          network adapter.
+          network adapter. (BSD License)
+
+smap    - This driver if for the standard Sony ethernet adapter which
+          is also used as part of the ps2linux kit. (GPL License)
 
 
 

@@ -4,60 +4,19 @@
 #
 #  ------------------------------------------------------------------------
 
-# Generated automatically from Makefile.in by configure.
-#.SUFFIXES: .S .c .o .s .elf .irx
+include ../Makefile.pref
+include ../Makefile.global
 
-#  ------------------------------------------------------------------------
-#  COMPILERS
-
-IOPCC = iop-gcc
-IOPAR = iop-ar
-IOPLD = iop-ld
-IOPAS = iop-as
-EECC  = ee-gcc
-EEAR  = ee-ar
-EELD  = ee-gcc
-
-
-#  ------------------------------------------------------------------------
-#  LWIP PATHS
-ROOT = $(PS2DEV)
-PS2LIB = $(ROOT)/ps2lib
-PS2IP = $(ROOT)/ps2ip
-
-LWIP = $(ROOT)/lwip060rc1
-#LWIP = $(ROOT)/ps2ip/iop/lwip_cvs
-LWIPINC = $(LWIP)/src/include
-LWIPCORE = $(LWIP)/src/core
-LWIPAPI = $(LWIP)/src/api
-
-
-#  ------------------------------------------------------------------------
-#  DIRECTORY PATHS & FLAGS
-
-EECFLAGS  = -mips3 -EL -nostartfiles -O2
-EEINCLUDES = -I. -I$(PS2LIB)/common/include -I$(PS2LIB)/ee/include
-EECOMPILE = $(EECC) $(EEINCLUDES) $(EECFLAGS) 
-EELINK = $(EELD)  
-
-IOPCFLAGS = -G0 -nostdlib -fno-builtin  -fomit-frame-pointer -Wall -EL -mcpu=r3000 -O2
-IOPINCLUDES = -I. -I$(PS2IP)/iop/ps2ip/include -I$(LWIPINC) -I$(LWIPINC)/ipv4 -I$(PS2LIB)/common/include -I$(PS2LIB)/iop/include
-IOPCOMPILE = $(IOPCC) $(IOPINCLUDES) $(IOPCFLAGS)
-IOPLINK = $(IOPLD) --script mipsirx.x 
-
-INSTALL_PROGRAM = ${INSTALL}
-INSTALL_DATA =${INSTALL} -m 644
 
 #  ------------------------------------------------------------------------
 #  PROJECTS TO BUILD
 
 all: ps2smap.irx
-	cp ps2smap.irx ../ps2smap.irx
+	cp ps2smap.irx ../bin
 
 
 clean:
-	rm *.irx
-	rm *.o
+	rm -f *.irx *.o
 
 
 #  ------------------------------------------------------------------------

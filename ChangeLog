@@ -1,0 +1,8 @@
+
+
+25-01-2003 - David Ryan (oobles@hotmail.com)
+
+  * Created Makefile pref and global options common for all drivers.
+  * Fixed bug to make SMAP compile with ps2lib.
+
+
