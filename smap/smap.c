@@ -1651,6 +1651,7 @@ void smap_send(struct pbuf * packet, int total_len)
             bcopy(q->payload, bufptr, q->len);
             bufptr += q->len;
         }
+
     }
 #endif
 

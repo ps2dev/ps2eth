@@ -18,7 +18,14 @@
 #define PS2SPD_PIO_DIR  0xb000002c
 #define PS2SPD_PIO_DATA 0xb000002e
 
+struct _ip_info
+{
+	struct ip_addr ipaddr;
+	struct ip_addr netmask;
+	struct ip_addr gw;
+} ip_info;
 
+void ResetPollThread();
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -44,6 +51,11 @@ int irqCounter;
 static int smapEvent;
 
 unsigned int unhandledIrq = 0;
+
+static int smapEnabled = 1;
+static int semEnabledVar;
+
+int ArpMutex;
 
 //////////////////////////////////////////////////////////////////////////
 static int 
@@ -102,10 +114,10 @@ detectAndInitDev9(void)
         CpuDisableIntr();
         DisableIntr(0xD, &oldstat);
         CpuEnableIntr();
-        printf("DEV9: oldstat %x\n", oldstat);
+//        printf("DEV9: oldstat %x\n", oldstat);
     }
 
-    printf("Enabling hw access!\n");
+//    printf("Enabling hw access!\n");
 
     UNKN_1020 |= 0x2000;
     UNKN_1420 = 0x51011;
@@ -117,7 +129,7 @@ detectAndInitDev9(void)
     if (temp16 == 0)
     {
         /* Need to map hw etc..? */
-        printf("'Starting' dev9\n");
+//        printf("'Starting' dev9\n");
 
         UNKN_1466 = 1;
         UNKN_146C = 0;
@@ -125,7 +137,7 @@ detectAndInitDev9(void)
         UNKN_1460 = UNKN_1464;
 
         if (UNKN_1462 & 0x01) {
-            printf("hohum, some error?\n");
+//            printf("hohum, some error?\n");
             return -2;
         }
         else
@@ -187,6 +199,15 @@ enableDev9Intr(void)
     UNKN_1466 = 0;
 }
 
+//////////////////////////////////////////////////////////////////////////
+static void
+disableDev9(void)
+{
+	UNKN_1466 = 1;
+	UNKN_146C = 0;
+	UNKN_1464 = UNKN_146C;
+	UNKN_1460 = UNKN_1464;
+}
 
 //////////////////////////////////////////////////////////////////////////
 static struct ip_addr ipaddr, netmask, gw;
@@ -202,24 +223,27 @@ smapthread(void *arg)
     unsigned int irq;
     int aliveCounter = 0;
 
-    printf("smap: proc running\n");
+//    printf("smap: proc running\n");
+
+	printf("SMAP: Initialising hardware...\n");
 
     detectAndInitDev9();
-    printf("smap: detect & init hw done\n");
+//    printf("smap: detect & init hw done\n");
 
     smap_init();
-    printf("smap: initialized, starting...\n");
+//    printf("smap: initialized, starting...\n");
 
     enableDev9Intr();
-    printf("smap: dev9 interrupt enabled...\n");
+//    printf("smap: dev9 interrupt enabled...\n");
 
     // Moved to low_level_init() in smapif.c
     //    smap_start();
 
-    IP4_ADDR(&ipaddr, 192,168,0,10 );
-    IP4_ADDR(&netmask, 255,255,255,0 );
-    IP4_ADDR(&gw, 192,168,0,1);
-    netif_add(&ipaddr, &netmask, &gw, smapif_init, tcpip_input);
+    memcpy(&ipaddr, &ip_info.ipaddr, sizeof(struct ip_addr));
+    memcpy(&netmask, &ip_info.netmask, sizeof(struct ip_addr));
+    memcpy(&gw, &ip_info.gw, sizeof(struct ip_addr));
+
+	netif_add(&ipaddr, &netmask, &gw, smapif_init, tcpip_input);
 
     // XXX: Needed?
     DelayThread( 2 * 1000 * 1000 ); 
@@ -230,10 +254,14 @@ smapthread(void *arg)
     // Interrupt loop
     do {
 
+		WaitSema(semEnabledVar);
+		if(!smapEnabled) break;
+		SignalSema(semEnabledVar);
+
         WaitEventFlag(smapEvent, 0xffff, 0x11, &eventStat);
         if (!(eventStat & 0x1)) {
             // This is not an event from the irq handler.. :P
-            printf("unknown event set\n");
+//            printf("unknown event set\n");
             continue;
         }
 
@@ -252,9 +280,13 @@ smapthread(void *arg)
 
     smap_stop();
 
+	printf("Disabling dev9\n");
+
+	disableDev9();
+
     printf("Smap thread done!\n");
 
-    ExitDeleteThread();
+    ExitThread();
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -271,6 +303,14 @@ _start( int argc, char **argv)
    FlushDcache();
    CpuEnableIntr(0);
 
+   if(argc < 2)
+   {
+		printf("SMAP: No ip_info structure passed to module!\n");
+		return 1;
+   }
+
+   memcpy(&ip_info, argv[1], sizeof(struct _ip_info));
+
    sem_info.attr = 1;
    sem_info.option = 1;
    sem_info.init_count = 0;
@@ -278,10 +318,33 @@ _start( int argc, char **argv)
 
    sem = CreateSema(&sem_info);
    if (sem <= 0) {
-       printf( "CreateSema failed %i\n", sem);
+       printf( "SMAP: CreateSema failed %i\n", sem);
        return 1;
    }
 
+   sem_info.attr = 1;
+   sem_info.option = 0;
+   sem_info.init_count = 1;
+   sem_info.max_count = 1;
+
+   semEnabledVar = CreateSema(&sem_info);
+   if (semEnabledVar <= 0) {
+       printf( "SMAP: CreateSema failed %i\n", semEnabledVar);
+       return 1;
+   }
+
+   sem_info.attr = 1;
+   sem_info.option = 0;
+   sem_info.init_count = 1;
+   sem_info.max_count = 1;
+
+   ArpMutex = CreateSema(&sem_info);
+   if (ArpMutex <= 0) {
+       printf( "SMAP: CreateSema failed %i\n", ArpMutex);
+       return 1;
+   }
+
+   // Start smap thread
    mythread.type = 0x02000000; // attr
    mythread.unknown = 0; // option
    mythread.function = smapthread; // entry
@@ -302,7 +365,53 @@ _start( int argc, char **argv)
    WaitSema(sem);
    DeleteSema(sem);
 
-   printf("Smap init done\n");
+   // Start reset poll thread
+   mythread.type = 0x02000000;
+   mythread.unknown = 0;
+   mythread.function = ResetPollThread;
+   mythread.stackSize = 0x800;
+   mythread.priority = 0x20;
+
+   pid = CreateThread(&mythread);
+
+   if (pid > 0) {
+       if ((i=StartThread(pid, NULL)) < 0) {
+           printf("StartThread failed (%d)\n", i);
+       }
+   } 
+   else {
+       printf("CreateThread failed (%d)\n", pid);
+   }
+
+   printf("SMAP: Init done!\n");
    return 0;
 }
 
+
+//////////////////////////////////////////////////////////////////////////
+// Experimental shutdown stuff...
+
+#define CDVD_REG_X	*((volatile unsigned int*)0xbf402008)
+
+void smapEnd()
+{
+	WaitSema(semEnabledVar);
+	smapEnabled = 0;
+	SignalSema(semEnabledVar);
+
+	SetEventFlag(smapEvent, 1);
+}
+
+void ResetPollThread()
+{
+	while(1)
+	{
+		if(CDVD_REG_X & 0x04)
+		{
+			smapEnd();
+			return;
+		}
+
+		DelayThread(1 * 1000);
+	}
+}

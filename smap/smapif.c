@@ -42,10 +42,26 @@
 #include "lwip/pbuf.h"
 #include "lwip/sys.h"
 
-#include "netif/etharp.h"
+#include "etharp.h"
 #include "sysclib.h"
 #include "smap.h"
+#include <kernel.h>
 
+/*
+void dump_pbuf(struct pbuf *p, char *function)
+{
+	struct pbuf *q;
+
+	printf("[%s] dump thread = %d\n", function, GetThreadId());
+
+	for(q = p; q != NULL; q = q->next)
+		printf("[%s] pbuf = 0x%X, payload = 0x%X, next = 0x%X, len = %d, tot_len = %d, flags = %d, ref = %d\n", function, p, q->payload, q->next, q->len, q->tot_len, q->flags, q->ref);
+}
+*/
+
+extern int ArpMutex;
+
+#define SMAPIF_DEBUG 0
 
 #define IFNAME0 's'
 #define IFNAME1 'm'
@@ -149,10 +165,14 @@ static err_t
 smapif_output(struct netif *netif, struct pbuf *p,
 		  struct ip_addr *ipaddr)
 {
+
+	WaitSema(ArpMutex);
     p = etharp_output(netif, ipaddr, p);
-    if(p != NULL) {
+	SignalSema(ArpMutex);
+
+    if(p != NULL)
         return low_level_output(netif, p);
-    }
+
     return ERR_OK;
 }
 
@@ -200,26 +220,25 @@ smapif_input(struct netif *netif, char * bufptr, int len)
     switch(htons(ethhdr->type)) {
     case ETHTYPE_IP:
         DEBUGF(SMAPIF_DEBUG, ("smapif_input: IP packet\n"));
+		WaitSema(ArpMutex);
         etharp_ip_input(netif, p);
+		SignalSema(ArpMutex);
         pbuf_header(p, -14);
 #ifdef LWIP_DEBUG    
-        if(ip_lookup(p->payload, netif)) {
+//        if(ip_lookup(p->payload, netif)) {
 #endif	    
             netif->input(p, netif);
 #ifdef LWIP_DEBUG    
-        } else {
-            printf("smapif_input: lookup failed!\n");
-        }
+//        } else {
+//            printf("smapif_input: lookup failed!\n");
+//        }
 #endif	    
         break;
     case ETHTYPE_ARP:
         DEBUGF(SMAPIF_DEBUG, ("smapif_input: ARP packet\n"));
-        p = etharp_arp_input(netif, smapif->ethaddr, p);
-        if(p != NULL) {
-            DEBUGF(SMAPIF_DEBUG, ("smapif_input: Sending ARP reply\n"));
-            low_level_output(netif, p);
-            pbuf_free(p);
-        }
+		WaitSema(ArpMutex);
+		etharp_arp_input(netif, smapif->ethaddr, p);
+		SignalSema(ArpMutex);
         break;
     default:
         pbuf_free(p);
@@ -230,7 +249,9 @@ smapif_input(struct netif *netif, char * bufptr, int len)
 static void
 arp_timer(void *arg)
 {
+  WaitSema(ArpMutex);
   etharp_tmr();
+  SignalSema(ArpMutex);
   //  sys_timeout(ARP_TMR_INTERVAL, (sys_timeout_handler)arp_timer, NULL);
 }
 /*----------------------------------------------------------------------*/
