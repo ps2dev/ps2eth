@@ -14,32 +14,8 @@
 
 # PS2LIB = /usr/ps2dev/ps2lib
 
-
-#
-# Location of LWIP source package.
-#
-
-LWIP = $(PS2DEV)/lwip060rc1
-
-
-
 #
 # Location of PS2IP source.
 #
 
 PS2IP = $(PS2DEV)/ps2ip
-
-
-
-#
-# Compilers and tools
-#
-
-IOPCC = iop-gcc
-IOPAR = iop-ar
-IOPLD = iop-ld
-IOPAS = iop-as
-
-EECC = ee-gcc
-EEAR = ee-ar
-EELD = ee-gcc

@@ -5,27 +5,9 @@
 
 #  Global settings.  Nothing in this file should require modification.
 
+COMMON_INC = $(TOPDIR)/common/include
+COMMON_LIB = $(TOPDIR)/common/lib
 
-#  ------------------------------------------------------------------------
-#  LWIP PATHS
+IOP_INCS += -I$(COMMON_INC) -I$(COMMON_INC)/ipv4
 
-LWIPINC = $(LWIP)/src/include
-LWIPCORE = $(LWIP)/src/core
-LWIPAPI = $(LWIP)/src/api
-
-
-#  ------------------------------------------------------------------------
-#  DIRECTORY PATHS & FLAGS
-
-EECFLAGS  = -mips3 -EL -nostartfiles
-EEINCLUDES = -I. -I$(PS2LIB)/common/include -I$(PS2LIB)/ee/include
-EECOMPILE = $(EECC) $(EEINCLUDES) $(EECFLAGS)
-EELINK = $(EELD)
-
-
-IOPCFLAGS = -G0 -nostdlib -fno-builtin  -fomit-frame-pointer -Wall -EL -mcpu=r3000 -O2
-IOPINCLUDES = -I. -I$(PS2IP)/iop/ps2ip/include -I$(LWIPINC) -I$(LWIPINC)/ipv4 -I$(PS2LIB)/common/include -I$(PS2LIB)/iop/include
-IOPCOMPILE = $(IOPCC) $(IOPINCLUDES) $(IOPCFLAGS)
-IOPLINK = $(IOPLD) --script mipsirx.x
-
-
+IOP_LDFLAGS += -L$(COMMON_LIB)
