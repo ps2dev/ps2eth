@@ -8,11 +8,9 @@
 
 #include "smap.h"
 
-static int init = 0;
-
 static int smap_txbd_check(smap_state_t *state);
 static int smap_receive(smap_state_t *state);
-static int smap_transmit(smap_state_t *state);
+static int smap_transmit(smap_state_t *state, struct pbuf *p);
 
 static int smap_phy_init();
 static int smap_phy_read(int reg, u16 *data);
@@ -21,7 +19,7 @@ static int smap_phy_write(int reg, u16 data);
 static int smap_intr_cb(int unused)
 {
 	dev9IntrDisable(SMAP_INTR_BITMSK);
-	iSetEventFlag(smap_evflg, SMAP_EVENT_INTR);
+	iSetEventFlag(smap_state.evflg, SMAP_EVENT_INTR);
 	return 0;
 }
 
@@ -31,12 +29,12 @@ int smap_reset(smap_state_t *state)
 	USE_SMAP_REGS;
 	USE_SMAP_EMAC3_REGS;
 	USE_SMAP_TX_BD; USE_SMAP_RX_BD;
-	u16 *hwaddr = (u16 *)state->hwaddr;
+	u16 *hwaddr = (u16 *)&state->eth_addr;
 	u32 val, checksum = 0;
 	int i;
 
 	if (!(SPD_REG16(SPD_R_REV_3) & 0x01) || SPD_REG16(SPD_R_REV_1) <= 16)
-		return -1;
+		return 1;
 
 	dev9IntrDisable(SMAP_INTR_BITMSK);
 
@@ -48,7 +46,7 @@ int smap_reset(smap_state_t *state)
 		DelayThread(1000);
 	}
 	if (!i)
-		return -1;
+		return 2;
 
 	/* Reset the receive FIFO.  */
 	SMAP_REG8(SMAP_R_RXFIFO_CTRL) = SMAP_RXFIFO_RESET;
@@ -58,7 +56,7 @@ int smap_reset(smap_state_t *state)
 		DelayThread(1000);
 	}
 	if (!i)
-		return -1;
+		return 3;
 
 	/* Perform soft reset of EMAC3.  */
 	SMAP_EMAC3_SET(SMAP_R_EMAC3_MODE0, SMAP_E3_SOFT_RESET);
@@ -68,7 +66,7 @@ int smap_reset(smap_state_t *state)
 		DelayThread(1000);
 	}
 	if (!i)
-		return -1;
+		return 4;
 
 	SMAP_REG8(SMAP_R_BD_MODE) = 0;
 
@@ -91,15 +89,15 @@ int smap_reset(smap_state_t *state)
 	/* Get our MAC address and make sure it checks out.  */
 	memset(hwaddr, 0, 6);
 	if (dev9GetEEPROM(hwaddr) < 0)
-		return -1;
+		return 5;
 	if (!hwaddr[0] || !hwaddr[1] || !hwaddr[2])
-		return -1;
+		return 6;
 
 	/* Verify the checksum.  */
 	for (i = 0; i < 3; i++)
 		checksum += hwaddr[i];
 	if (checksum != state->checksum)
-		return -1;
+		return 7;
 
 	val = SMAP_E3_FDX_ENABLE|SMAP_E3_IGNORE_SQE|SMAP_E3_MEDIA_100M|
 		SMAP_E3_RXFIFO_2K|SMAP_E3_TXFIFO_1K|SMAP_E3_TXREQ0_MULTI;
@@ -147,18 +145,19 @@ int smap_reset(smap_state_t *state)
 int smap_init_event(smap_state_t *state)
 {
 	USE_SMAP_EMAC3_REGS;
+	int res;
 
-	if (init)
+	if (state->has_init)
 		return 0;
 
 	dev9IntrEnable(SMAP_INTR_EMAC3|SMAP_INTR_RXEND|SMAP_INTR_RXDNV);
-	if (smap_phy_init() < 0)
-		return 1;
+	if ((res = smap_phy_init()) != 0)
+		return res;
 
 	SMAP_EMAC3_SET(SMAP_R_EMAC3_MODE0, SMAP_E3_TXMAC_ENABLE|SMAP_E3_RXMAC_ENABLE);
 	DelayThread(10000);
 
-	init = 1;
+	state->has_init = 1;
 	return 0;
 }
 
@@ -166,12 +165,12 @@ void smap_exit_event(smap_state_t *state)
 {
 	USE_SMAP_EMAC3_REGS;
 
-	if (!init)
+	if (!state->has_init)
 		return;
 
 	dev9IntrDisable(SMAP_INTR_EMAC3|SMAP_INTR_RXEND|SMAP_INTR_RXDNV);
 	SMAP_EMAC3_SET(SMAP_R_EMAC3_MODE0, 0);
-	init = 0;
+	state->has_init = 0;
 }
 
 int smap_interrupt_event(smap_state_t *state)
@@ -202,6 +201,7 @@ int smap_interrupt_event(smap_state_t *state)
 	}
 
 	if (istat & SMAP_INTR_TXDNV) {
+		SMAP_REG16(SMAP_R_INTR_CLR) = SMAP_INTR_TXDNV;
 		smap_txbd_check(state);
 		return 1;
 	}
@@ -209,11 +209,13 @@ int smap_interrupt_event(smap_state_t *state)
 	return 0;
 }
 
-void smap_tx_event(smap_state_t *state)
+int smap_tx_event(smap_state_t *state, struct pbuf *p)
 {
 	USE_SMAP_EMAC3_REGS;
+	int res = 0;
 
-	smap_transmit(state);
+	if (p)
+		res = smap_transmit(state, p);
 	smap_txbd_check(state);
 	dev9IntrEnable(SMAP_INTR_EMAC3|SMAP_INTR_RXEND|SMAP_INTR_RXDNV);
 
@@ -221,6 +223,8 @@ void smap_tx_event(smap_state_t *state)
 		SMAP_EMAC3_SET(SMAP_R_EMAC3_TxMODE0, SMAP_E3_TX_GNP_0);
 		dev9IntrEnable(SMAP_INTR_TXDNV);
 	}
+
+	return res;
 }
 
 static u32 smap_dma_transfer(void *buf, u32 size, int dir)
@@ -265,7 +269,8 @@ static int smap_receive(smap_state_t *state)
 {
 	USE_SMAP_REGS;
 	USE_SMAP_RX_BD;
-	struct pbuf *p, *q;
+	struct pbuf *p, *q, *r = NULL;
+	u8 *payload;
 	int rxbdi, res, received = 0;
 	u16 stat, len, ptr, plen;
 
@@ -277,8 +282,7 @@ static int smap_receive(smap_state_t *state)
 		len = rx_bd[rxbdi].length;
 		ptr = rx_bd[rxbdi].pointer;
 
-		if (stat & SMAP_BD_TX_ERROR) {
-
+		if (stat & SMAP_BD_RX_ERROR) {
 			goto error;
 		}
 
@@ -292,22 +296,25 @@ error:
 		/* Now we are ready to receive the data from the RX buffer.
 		   First we DMA the data in, and anything left over we copy.  */
 		for (q = p; q; q = q->next) {
+			payload = q->payload;
 			SMAP_REG16(SMAP_R_RXFIFO_RD_PTR) = ptr;
-			if ((res = smap_dma_transfer(q->payload, q->len, SMAP_DMA_IN)) > 0)
-				q->payload += res;
+			if ((res = smap_dma_transfer(payload, q->len, SMAP_DMA_IN)) > 0)
+				payload += res;
 
 			while (res < q->len) {
-				*(u32 *)q->payload = SMAP_REG32(SMAP_R_RXFIFO_DATA);
-				q->payload += 4;
+				*(u32 *)payload = SMAP_REG32(SMAP_R_RXFIFO_DATA);
+				payload += 4;
 				res += 4;
 			}
-			/* Increment the BD pointer.  */
-			ptr += res;
 		}
 
-		/* Pass the data to the LwIP API.  */
+		/* Add this to our chain */
 		received = 1;
-		/* smapif_input(state, p); */
+		if (!r)
+			r = p;
+		else
+			pbuf_chain(r, p);
+		
 
 next_bd:
 		SMAP_REG8(SMAP_R_RXFIFO_FRAME_DEC) = 0;
@@ -315,39 +322,44 @@ next_bd:
 		state->rxbdi++;
 	}
 
+	/* All packets were received, now send them off.  */
+	if (received)
+		smap_if_input(state, r);
 	return received;
 }
 
-static int smap_transmit(smap_state_t *state)
+static int smap_transmit(smap_state_t *state, struct pbuf *p)
 {
 	USE_SMAP_REGS;
 	USE_SMAP_TX_BD;
-	struct pbuf *p = state->tx_pbuf, *q;
+	struct pbuf *q;
+	u8 *payload;
 	int txbdi, res, transmitted = 0;
-	u16 plen, alen, ptr;
+	u16 alen, ptr;
 
 	/* Send each pbuf in the chain individually.  */
 	for (q = p; q; q = q->next) {
 		if (state->txbd_used >= SMAP_BD_MAX_ENTRY)
 			goto done;
 
-		alen = ((plen = q->len) + 3) & 0xfffc;
-		if (alen >= state->txbp)
+		alen = (q->len + 3) & 0xfffc;
+		if (alen > state->txbp)
 			goto done;
 
-		ptr = SMAP_REG16(SMAP_R_TXFIFO_WR_PTR) + 4096;
-		if ((res = smap_dma_transfer(q->payload, plen, SMAP_DMA_OUT)) > 0)
-			q->payload += res;
+		payload = q->payload;
+		ptr = SMAP_REG16(SMAP_R_TXFIFO_WR_PTR) + SMAP_TX_BASE;
+		if ((res = smap_dma_transfer(payload, alen, SMAP_DMA_OUT)) > 0)
+			payload += res;
 
-		while (res < plen) {
-			SMAP_REG32(SMAP_R_TXFIFO_DATA) = *(u32 *)q->payload;
-			q->payload += 4;
+		while (res < alen) {
+			SMAP_REG32(SMAP_R_TXFIFO_DATA) = *(u32 *)payload;
+			payload += 4;
 			res += 4;
 		}
 
 		transmitted = 1;
 		txbdi = state->txbdi & 0x3f;
-		tx_bd[txbdi].length = plen;
+		tx_bd[txbdi].length = q->len;
 		tx_bd[txbdi].pointer = ptr;
 		SMAP_REG8(SMAP_R_TXFIFO_FRAME_INC) = 0;
 		tx_bd[txbdi].ctrl_stat = SMAP_BD_TX_READY| \
@@ -431,25 +443,88 @@ static int smap_phy_write(int reg, u16 data)
 
 static int smap_phy_init()
 {
+	USE_SMAP_EMAC3_REGS;
 	u32 val;
-	int i;
-	u16 phydata;
+	int i, j;
+	u16 phydata, idr1, idr2;
 
 	/* Reset the PHY.  */
 	smap_phy_write(SMAP_DsPHYTER_BMCR, SMAP_PHY_BMCR_RST);
 	/* Wait for it to come out of reset.  */
 	for (i = 9; i; i--) {
 		if (smap_phy_read(SMAP_DsPHYTER_BMCR, &phydata) != 0)
-			return 4;
+			return 1;
 		if (!(phydata & SMAP_PHY_BMCR_RST))
 			break;
 		DelayThread(1000);
 	}
 	if (!i)
-		return -1;
+		return 2;
 
-	val = SMAP_PHY_BMCR_LPBK|SMAP_PHY_BMCR_100M|SMAP_PHY_BMCR_DUPM;
+	val = SMAP_PHY_BMCR_ANEN|SMAP_PHY_BMCR_RSAN;
 	smap_phy_write(SMAP_DsPHYTER_BMCR, val);
+
+	/* Attempt to complete autonegotiation up to 3 times.  */
+	for (i = 0; i < 3; i++) {
+		DelayThread(3000000);
+		if (smap_phy_read(SMAP_DsPHYTER_BMSR, &phydata) != 0)
+			return 3;
+
+		if (phydata & SMAP_PHY_BMSR_ANCP) {
+			for (j = 0; j < 20; j++) {
+				DelayThread(200000);
+				if (smap_phy_read(SMAP_DsPHYTER_BMSR, &phydata) != 0)
+					return 4;
+
+				if (phydata & SMAP_PHY_BMSR_LINK)
+					goto auto_done;
+			}
+		}
+		/* If autonegotiation failed, we got here, so restart it.  */
+		smap_phy_write(SMAP_DsPHYTER_BMCR, val);
+	}
+	/* Autonegotiation failed.  */
+	return 5;
+
+auto_done:
+	/* Now, read our speed and duplex mode from the PHY.  */
+	if (smap_phy_read(SMAP_DsPHYTER_PHYSTS, &phydata) != 0)
+		return 6;
+
+	val = SMAP_EMAC3_GET(SMAP_R_EMAC3_MODE1);
+	if (phydata & SMAP_PHY_STS_FDX)
+		val |= SMAP_E3_FDX_ENABLE|SMAP_E3_FLOWCTRL_ENABLE|SMAP_E3_ALLOW_PF;
+	else
+		val &= ~(SMAP_E3_FDX_ENABLE|SMAP_E3_FLOWCTRL_ENABLE|SMAP_E3_ALLOW_PF);
+
+	val &= ~SMAP_E3_MEDIA_MSK;
+	if (phydata & SMAP_PHY_STS_10M) {
+		val &= ~SMAP_E3_IGNORE_SQE;
+		val |= SMAP_E3_MEDIA_10M;
+	} else {
+		val |= SMAP_E3_MEDIA_100M;
+	}
+
+	SMAP_EMAC3_SET(SMAP_R_EMAC3_MODE1, val);
+
+	/* DSP setup.  */
+	if (smap_phy_read(SMAP_DsPHYTER_PHYIDR1, &idr1) != 0)
+		return 7;
+	if (smap_phy_read(SMAP_DsPHYTER_PHYIDR2, &idr2) != 0)
+		return 8;
+
+	if (idr1 == SMAP_PHY_IDR1_VAL &&
+			((idr2 & SMAP_PHY_IDR2_MSK) == SMAP_PHY_IDR2_VAL)) {
+		if (phydata & SMAP_PHY_STS_10M)
+			smap_phy_write(0x1a, 0x104);
+
+		smap_phy_write(0x13, 0x0001);
+		smap_phy_write(0x19, 0x1898);
+		smap_phy_write(0x1f, 0x0000);
+		smap_phy_write(0x1d, 0x5040);
+		smap_phy_write(0x1e, 0x008c);
+		smap_phy_write(0x13, 0x0000);
+	}
 
 	return 0;
 }
