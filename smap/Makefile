@@ -4,22 +4,23 @@
 #                           (C)2003, adresd     ( adresd_ps2dev@yahoo.com )
 #  ------------------------------------------------------------------------
 
-TOPDIR = ..
 
-IOP_BIN = ../bin/ps2smap.irx
-IOP_OBJS = smap.o smapif.o main.o iop_ps2dev9.o
+IOP_BIN = ps2smap.irx
+IOP_OBJS = main.o smap.o imports.o
 
-IOP_LDFLAGS += -L$(PS2IP)/iop/lib -s
-IOP_LIBS += -liop_ps2ip -llwip_common
-IOP_CFLAGS += -DPS2DRV_COMPAT
+ifeq ($(DEBUG),1)
+DEBUG_FLAGS = -DDEBUG
+endif
+
+IOP_INCS += -I$(PS2SDK)/iop/include
+IOP_CFLAGS += -Wall -fno-builtin $(DEBUG_FLAGS)
+IOP_LDFLAGS += -s
 
 all: $(IOP_BIN)
 
 clean:
 	-rm -f *.o
 
-include $(TOPDIR)/Makefile.pref
-include $(TOPDIR)/Makefile.global
+include $(PS2SDK)/Defs.make
+include Rules.make
 
-include $(PS2LIB)/Makefile.pref
-include $(PS2LIB)/Makefile.iopglobal

@@ -4,467 +4,534 @@
  *
  */
 
-#include <tamtypes.h>
-#include <fileio.h>
-#include <stdlib.h>
 #include <stdio.h>
 #include <sysclib.h>
-#include <kernel.h>
+#include <loadcore.h>
+#include <thbase.h>
 #include <thevent.h>
 #include <thsemap.h>
 #include <vblank.h>
-#include <timer.h>
+#include <intrman.h>
 
-#include <lwip/netif.h>
+#include "ps2ip.h"
 #include "smap.h"
-
-#define PS2SPD_PIO_DIR  0xb000002c
-#define PS2SPD_PIO_DATA 0xb000002e
-
-//////////////////////////////////////////////////////////////////////////
-
-#define UNKN_1020   *(volatile unsigned int *)0xbf801020
-#define UNKN_1418   *(volatile unsigned int *)0xbf801418
-#define UNKN_141C   *(volatile unsigned int *)0xbf80141c
-#define UNKN_1420   *(volatile unsigned int *)0xbf801420
-
-#define UNKN_1460   *(volatile unsigned short *)0xbf801460
-#define UNKN_1462   *(volatile unsigned short *)0xbf801462
-#define UNKN_1464   *(volatile unsigned short *)0xbf801464
-#define UNKN_1466   *(volatile unsigned short *)0xbf801466
-#define UNKN_146C   *(volatile unsigned short *)0xbf80146c
-#define UNKN_146E   *(volatile unsigned short *)0xbf80146e
-
-#define UNKN_POFF   *(volatile unsigned char *)0xbf402008
-
-#define	SMAP16(offset)	(*(volatile u_int16_t *)(SMAP_BASE + (offset)))
+#include "dev9.h"
 
 
-//////////////////////////////////////////////////////////////////////////
-// Some global stuff
-int irqCounter;
-int smapEvent;
+#define	UNKN_1464   *(u16 volatile*)0xbf801464
 
-unsigned int unhandledIrq = 0;
+#define	IFNAME0	's'
+#define	IFNAME1	'm'
 
-int ArpMutex;
+#define	TIMER_INTERVAL		(100*1000)
+#define	TIMEOUT				(300*1000)
+#define	MAX_REQ_CNT			8
 
-//////////////////////////////////////////////////////////////////////////
+typedef struct ip_addr	IPAddr;
+typedef struct netif		NetIF;
+typedef struct SMapIF	SMapIF;
+typedef struct pbuf		PBuf;
+
+
+static int		iSendMutex;
+static int		iSendReqMutex;
+static int		iSendReq=-1;
+static int 		iReqNR=0;
+static int 		iReqCNT=0;
+static PBuf*	apReqQueue[MAX_REQ_CNT];
+static int		iTimeoutCNT=0;
+
+
+struct SMapIF
+{
+	NetIF*	pNetIF;
+};
+
+static SMapIF	SIF;
+static NetIF	NIF;
+
+
+//From lwip/err.h and lwip/tcpip.h
+
+#define	ERR_OK		0		//No error, everything OK
+#define	ERR_CONN		-6		//Not connected
+#define	ERR_IF		-11	//Low-level netif error
+
+
+static void
+StoreLast(PBuf* pBuf)
+{
+
+	//Store pBuf last in the request-queue.
+
+	apReqQueue[(iReqNR+iReqCNT)%MAX_REQ_CNT]=pBuf;
+	++iReqCNT;
+
+	//Since pBuf won't be sent right away, increase the reference-count to prevent it from being deleted before it's sent.
+
+	++(pBuf->ref);
+}
+
+
+static SMapStatus
+AddToQueue(PBuf* pBuf)
+{
+
+	//Add pBuf to the request-queue.
+
+	int			iIntFlags;
+	SMapStatus	Ret;
+
+	//Due to synchronization issues, disable the interrupts.
+
+	CpuSuspendIntr(&iIntFlags);
+
+	if	(iReqCNT==0)
+	{
+
+		//The queue is empty, try to send the packet right away.
+
+		Ret=SMap_Send(pBuf);
+
+		//Did a TX-resource exhaustion occur?
+
+		if	(Ret==SMap_TX)
+		{
+
+			//Yes, store pBuf last in the queue so it's sent when there are enough TX-resources.
+
+			StoreLast(pBuf);
+
+			//Clear the timout-timer.
+
+			iTimeoutCNT=0;
+
+			//Set the return-value to SMap_OK to indicate that pBuf has been either sent or added to the queue.
+
+			Ret=SMap_OK;
+		}
+	}
+	else if	(iReqCNT<MAX_REQ_CNT)
+	{
+
+		//There queue isn't empty but there is atleast one free entry. Store pBuf last in the queue.
+
+		StoreLast(pBuf);
+
+		//Set the return-value to SMap_OK to indicate that pBuf has been either sent or added to the queue.
+
+		Ret=SMap_OK;
+	}
+	else
+	{
+
+		//The queue is full, return SMap_TX to indicate that.
+
+		Ret=SMap_TX;
+	}
+
+	//Restore the interrupts.
+
+	CpuResumeIntr(iIntFlags);
+	return	Ret;
+}
+
+
+static void
+SendRequests(void)
+{
+
+	//This function should only be called from QueueHandler. It tries to send as many requests from the queue until there is an
+	//TX-resource exhaustion.
+
+	while	(iReqCNT>0)
+	{
+
+		//Retrieve the first request in the queue.
+
+		PBuf*		pReq=apReqQueue[iReqNR];
+
+		//Try to send the packet!
+
+		SMapStatus	Status=SMap_Send(pReq);
+
+		//Clear the timout-timer.
+
+		iTimeoutCNT=0;
+
+		//Did a TX-resource exhaustion occur?
+
+		if	(Status==SMap_TX)
+		{
+
+			//Yes, we'll try to re-send the packet the next time a TX-interrupt occur, exit!
+
+			return;
+		}
+
+		//No resource-exhaustion occured. Regardless if the packet was successfully sent or nor, process the next request. If it's
+		//an important package and ps2ip won't receive an ack, it'll resend the package. We are done with pReq and should invoke
+		//pbuf_free to decrease the ref-count.
+
+		pbuf_free(pReq);
+
+		//pReq has been sent, advance the queue-index one step.
+
+		iReqNR=(iReqNR+1)%MAX_REQ_CNT;
+		--iReqCNT;
+	}
+}
+
+
+static void
+QueueHandler(void)
+{
+
+	//This function should only be called from an interrupt-context. It tries to send as many requests as possible from the queue
+	//and signals any waiting thread if the queue becomes non-full. Start with trying to send the reqs.
+
+	SendRequests();
+
+	//Is there a thread waiting for the queue to become non-full?
+
+	if	(iSendReq!=-1)
+	{
+
+		//Yes, send it a signal that it should try to add to the queue now.
+
+		iSignalSema(iSendReq);
+		iSendReq=-1;
+	}
+}
+
+
 static int 
-smapIrq(void *data)
+SMapInterrupt(int iFlag)
 {
-    unsigned short smapIntr;
+	int	iFlags=SMap_GetIRQ();
 
+	if	(iFlags&(INTR_TXDNV|INTR_TXEND))
+	{
 
-    if(SMAP16(SMAP_INTR_ENABLE) & SMAP16(SMAP_INTR_STAT)) {
-        irqCounter++;
+		//It's a TX-interrupt, handle it now!
 
-        do {
-            smapIntr = SMAP16(SMAP_INTR_STAT);
-            if (!(smapIntr & INTR_BITMSK)) {
-                // Uh.. Strange
-                unhandledIrq = (~INTR_BITMSK) & smapIntr;
-                break;
-            }
-            else {
-                smap_intr_interrupt_XXable(0);
-                iSetEventFlag(smapEvent, 1);
-            }
-        } while (SMAP16(SMAP_INTR_STAT) & SMAP16(SMAP_INTR_ENABLE));
-    }
+		SMap_HandleTXInterrupt(iFlags&(INTR_TXDNV|INTR_TXEND));
 
-    UNKN_1466 = 1;
-    UNKN_1466 = 0;
+		//Handle the request-queue.
 
-    return 1;
+		QueueHandler();
+
+		//Several packets might have been sent during QueueHandler and we might have spent a couple of 1000 usec. Re-read the
+		//interrupt-flags to more accurately reflect the current interrupt-status.
+
+		iFlags=SMap_GetIRQ();
+	}
+
+	if	(iFlags&(INTR_EMAC3|INTR_RXDNV|INTR_RXEND))
+	{
+
+		//It's a RX- or a EMAC-interrupt, handle it!
+
+		SMap_HandleRXEMACInterrupt(iFlags&(INTR_EMAC3|INTR_RXDNV|INTR_RXEND));
+	}
+	return	1;
 }
 
-//////////////////////////////////////////////////////////////////////////
-
-void
-disableDev9(void)
-{
-#ifdef PS2DRV_COMPAT
-    dev9Shutdown();
-#else
-    // This will turn off dev9..
-    UNKN_1466 = 1;
-    UNKN_146C = 0;
-    UNKN_1464 = UNKN_146C;
-    UNKN_1460 = UNKN_1464;
-
-    UNKN_POFF |= 0x4;
-#endif
-}
-
-//////////////////////////////////////////////////////////////////////////
-static int
-detectAndInitDev9(void)
-{
-#ifdef PS2DRV_COMPAT
-    // shortened version, as some is done by ps2dev9
-
-    unsigned short temp16;
-    unsigned int oldint;
-    {
-        struct t_event event;
-
-        event.attr = 0;
-        event.option = 0;
-        event.init_mask = 0;
-        smapEvent = CreateEventFlag(&event);
-    }
-
-    if (smapEvent <= 0)
-    {
-        printf("Could not create event flag (%x)\n", smapEvent);
-        return -3;
-    }
-
-    CpuSuspendIntr(&oldint);
-    temp16 = SMAP16(SMAP_INTR_ENABLE);
-    SMAP16(SMAP_INTR_ENABLE) = 0;
-    temp16 = SMAP16(SMAP_INTR_ENABLE);
-    CpuResumeIntr(oldint);
-
-    UNKN_1464 = 3;
-
-#else
-
-    unsigned short temp16;
-    unsigned int oldint;
-
-    /* 0xF0 & *(0xbf80146e) == 0x30 -> What dev9 device we're dealing with */
-    temp16 = UNKN_146E;
-    temp16 &= 0xf0;
-    if (temp16 == 0x20) {
-        printf("CXD9566 detected, but no driver.. sorry\n");
-        return 1;
-    }
-
-    if (temp16 != 0x30) {
-        printf("Unknown dev9 device detected\n");
-        return -1;
-    }
-
-    dbgprintf("dev9: Enabling hw access!\n");
-
-    UNKN_1020 |= 0x2000;
-    UNKN_1420 = 0x51011;
-    UNKN_1418 = 0xe01a3043;
-    UNKN_141C = 0xef1a3043;
-
-    temp16 = UNKN_146C;
-
-    if (temp16 == 0)
-    {
-        /* Need to map hw etc..? */
-
-        UNKN_1466 = 1;
-        UNKN_146C = 0;
-        UNKN_1464 = UNKN_146C;
-        UNKN_1460 = UNKN_1464;
-
-        if (UNKN_1462 & 0x01) {
-            printf("hohum, some error?\n");
-            return -2;
-        }
-        else
-        {
-            UNKN_146C = 0;
-            UNKN_146C |= 4;
-            DelayThread(200*1000);
-            
-            UNKN_1460 |= 1;
-            UNKN_146C |= 1;
-            DelayThread(200*1000);
-            
-            temp16 = SMAP16(0x02); // Wonder why?
-            //            temp16 = *(volatile unsigned short *)0xb0000002; // XXX: What's this reg name?
-        }        
-
-    }
-
-
-    {
-        struct t_event event;
-
-        event.attr = 0;
-        event.option = 0;
-        event.init_mask = 0;
-        smapEvent = CreateEventFlag(&event);
-    }
-
-    if (smapEvent <= 0)
-    {
-        printf("Could not create event flag (%x)\n", smapEvent);
-        return -3;
-    }
-
-    CpuSuspendIntr(&oldint);
-    temp16 = SMAP16(SMAP_INTR_ENABLE);
-    SMAP16(SMAP_INTR_ENABLE) = 0;
-    temp16 = SMAP16(SMAP_INTR_ENABLE);
-    CpuResumeIntr(oldint);
-
-    UNKN_1464 = 3;
-#endif
-    return 0;
-}
-
-//////////////////////////////////////////////////////////////////////////
-void
-enableDev9Intr(void)
-{
-#ifndef PS2DRV_COMPAT
-    // Enable interrupt handler
-    CpuDisableIntr();
-
-    RegisterIntrHandler(0xD, 1, smapIrq, (void *)smapEvent);
-    EnableIntr(0xD);
-
-    CpuEnableIntr();
-
-    UNKN_1466 = 0;
-#endif
-}
-
-//////////////////////////////////////////////////////////////////////////
-
-#define RESET_POLL_INTERVAL 100*1000
-static struct timestamp clock_ticks;
-
-//////////////////////////////////////////////////////////////////////////
 
 static unsigned int 
-powerOffHandler(void *arg)
+Timer(void* pvArg)
 {
 
-    if (UNKN_POFF & 0x4) {
-        iSetEventFlag(smapEvent, 4);
-        return 0;
-    }
+	//Are there any requests in the queue?
 
-    return (unsigned int)arg;
+	if	(iReqCNT==0)
+	{
+
+		//No, exit!
+
+		return	(unsigned int)pvArg;
+	}
+
+	//Yes, If no TX-interrupt has occured for the last TIMEOUT usec, process the request-queue.
+
+	iTimeoutCNT+=TIMER_INTERVAL;
+	if	(iTimeoutCNT>=TIMEOUT&&iTimeoutCNT<(TIMEOUT+TIMER_INTERVAL))
+	{
+
+		//Timeout, handle the request-queue.
+
+		QueueHandler();
+	}
+	return	(unsigned int)pvArg;
 }
 
-//////////////////////////////////////////////////////////////////////////
+
+static void
+InstallIRQHandler(void)
+{
+
+	//Install the SMap interrupthandler for all of the SMap-interrupts.
+
+	int	iA;
+
+	for	(iA=2;iA<7;++iA)
+	{
+		dev9RegisterIntrCb(iA,SMapInterrupt);
+	}
+}
+
+
+static void
+InstallTimer(void)
+{
+	iop_sys_clock_t	ClockTicks;
+
+	USec2SysClock(TIMER_INTERVAL,&ClockTicks);
+	SetAlarm(&ClockTicks,Timer,(void*)ClockTicks.lo);
+}
+
+
+static void
+DetectAndInitDev9(void)
+{
+	SMap_DisableInterrupts(INTR_BITMSK);
+	EnableIntr(IOP_IRQ_DEV9);
+	CpuEnableIntr();
+
+	UNKN_1464=3;
+}
+
+
+static err_t
+Send(PBuf* pBuf)
+{
+
+	//Send the packet in pBuf.
+
+	while	(1)
+	{
+		int			iFlags;
+		SMapStatus	Res;
+
+		//Try to add the packet to the request-queue.
+
+		if	((Res=AddToQueue(pBuf))==SMap_OK)
+		{
+
+			//The packet was sent successfully or added to the queue, return ERR_OK.
+
+			return	ERR_OK;
+		}
+		else if	(Res==SMap_Err)
+		{
+
+			//SMap_Send wasn't able to send the packet due to some hardware limitation, return ERR_IF to indicate that.
+
+			return	ERR_IF;
+		}
+		else if	(Res==SMap_Con)
+		{
+
+			//SMap_Send wasn't able to send the packet due to not being connected, return ERR_CONN to indicate that.
+
+			return	ERR_CONN;
+		}
+
+		//The request-queue is full. If iSendReq is assigned a mutex-id when an TX-interrupt occur, SMapInterrupt will signal that
+		//mutex when there is room in the queue. Due to synchronization issues, we must first acquire the iSendMutex before we can
+		//assign iSendReq.
+
+		WaitSema(iSendMutex);
+
+		//There is a possibility that the queue has become non-full during the acquisition of the mutex. Verify that it still is
+		//full.
+
+		CpuSuspendIntr(&iFlags);
+		if	(iReqCNT==MAX_REQ_CNT)
+		{
+
+			//It's still full. Assign iSendReqMutex to iSendReq.
+
+			iSendReq=iSendReqMutex;
+			CpuResumeIntr(iFlags);
+
+			//Wait for the SMapInterrupt to signal us.
+
+			WaitSema(iSendReqMutex);
+		}
+		else
+		{
+
+			//The queue isn't full anymore, try to add pBuf to it.
+
+			CpuResumeIntr(iFlags);
+		}
+
+		//Release the iSendMutex
+
+		SignalSema(iSendMutex);
+	}
+}
+
+
+//SMapLowLevelOutput():
+
+//This function is called by the TCP/IP stack when a low-level packet should be sent. It'll be invoked in the context of the
+//tcpip-thread.
+
+static err_t
+SMapLowLevelOutput(NetIF* pNetIF,PBuf* pOutput)
+{
+	return	Send(pOutput);
+}
+
+
+//SMapOutput():
+
+//This function is called by the TCP/IP stack when an IP packet should be sent. It'll be invoked in the context of the
+//tcpip-thread, hence no synchronization is required.
+
+static err_t
+SMapOutput(NetIF* pNetIF,PBuf* pOutput,IPAddr* pIPAddr)
+{
+	PBuf*		pBuf=etharp_output(pNetIF,pIPAddr,pOutput);
+
+	return	pBuf!=NULL ? Send(pBuf):ERR_OK;
+}
+
+
+//SMapIFInit():
+
+//Should be called at the beginning of the program to set up the network interface.
+
+static err_t
+SMapIFInit(NetIF* pNetIF)
+{
+	SIF.pNetIF=pNetIF;
+	pNetIF->state=&NIF;
+	pNetIF->name[0]=IFNAME0;
+	pNetIF->name[1]=IFNAME1;
+	pNetIF->output=SMapOutput;
+	pNetIF->linkoutput=SMapLowLevelOutput;
+	pNetIF->hwaddr_len=6;
+	pNetIF->mtu=1500;
+
+	//Get MAC address.
+
+	memcpy(pNetIF->hwaddr,SMap_GetMACAddress(),6);
+	dbgprintf("MAC address : %02d:%02d:%02d:%02d:%02d:%02d\n",pNetIF->hwaddr[0],pNetIF->hwaddr[1],pNetIF->hwaddr[2],
+				 pNetIF->hwaddr[3],pNetIF->hwaddr[4],pNetIF->hwaddr[5]);
+
+	//Enable sending and receiving of data.
+
+	SMap_Start();
+	return	ERR_OK;
+}
+
+
 void
-installPowerOffHandler(void)
+SMapLowLevelInput(PBuf* pBuf)
 {
-    USec2SysClock(RESET_POLL_INTERVAL, &clock_ticks);
-    SetAlarm(&clock_ticks, powerOffHandler, (void *)clock_ticks.clk);
+
+	//When we receive data, the interrupt-handler will invoke this function, which means we are in an interrupt-context. Pass on
+	//the received data to ps2ip.
+
+	ps2ip_input(pBuf,&NIF);	
 }
 
-//////////////////////////////////////////////////////////////////////////
-static struct ip_addr ipaddr, netmask, gw;
-extern err_t tcpip_input(struct pbuf *p, struct netif *inp);
-extern void smapif_init(struct netif *netif);
 
-//////////////////////////////////////////////////////////////////////////
-void
-smapthread(void *arg)
+static int
+SMapInit(IPAddr IP,IPAddr NM,IPAddr GW)
 {
-    int oldIntr;
-    int eventStat;
-    unsigned int irq;
-    int aliveCounter = 0;
-    struct netif *smapif;
+	DetectAndInitDev9();
+	dbgprintf("SMapInit: Dev9 detected & initialized\n");
 
-    dbgprintf("smap: proc running\n");
+	if	((iSendMutex=CreateMutex(IOP_MUTEX_UNLOCKED))<0)
+	{
+		printf("SMapInit: Fatal error - unable to create iSendMutex\n");
+		return	0;
+	}
 
-    detectAndInitDev9();
-    dbgprintf("smap: detect & init hw done\n");
+	if	((iSendReqMutex=CreateMutex(IOP_MUTEX_UNLOCKED))<0)
+	{
+		printf("SMapInit: Fatal error - unable to create iSendReqMutex\n");
+		return	0;
+	}
 
-    smap_init();
-    dbgprintf("smap: initialized, starting...\n");
+	if	(!SMap_Init())
+	{
+		return	0;
+	}
+	dbgprintf("SMapInit: SMap initialized\n");
 
-#ifndef PS2DRV_COMPAT
-    installPowerOffHandler();
-#endif
+	InstallIRQHandler();
+	dbgprintf("SMapInit: Interrupt-handler installed\n");
 
-    // Moved to low_level_init() in smapif.c
-    //    enableDev9Intr();
-    //    printf("smap: dev9 interrupt enabled...\n");
-    //    smap_start();
+	InstallTimer();
+	dbgprintf("SMapInit: Timer installed\n");
 
-    // IP address stuff is moved to _start()
-    //    IP4_ADDR(&ipaddr, 192,168,0,10 );
-    //    IP4_ADDR(&netmask, 255,255,255,0 );
-    //    IP4_ADDR(&gw, 192,168,0,1);
-    smapif = netif_add(&ipaddr, &netmask, &gw, NULL, smapif_init, tcpip_input);
-    netif_set_default(smapif);
+	netif_add(&NIF,&IP,&NM,&GW,NULL,SMapIFInit,tcpip_input);
+	netif_set_default(&NIF);
+	dbgprintf("SMapInit: NetIF added to ps2ip\n");
 
-    // Return from irx init (i.e. we are ready to handle requests)
-    SignalSema((int)arg);
+	//Return 1 (true) to indicate success.
 
-    dbgprintf("SMAP: Ready\n");
-    // Interrupt loop
-    do {
-
-        WaitEventFlag(smapEvent, 0xffff, 0x11, &eventStat);
-        if (!(eventStat & 0xf)) {
-            // This is not an event from the irq handler.. :P
-            printf("unknown event set\n");
-            continue;
-        }
-
-        if (eventStat & 8) {
-            // Dbg event
-            printf("smap: dbg event\n");
-        }
-
-        if (eventStat & 4) {
-            // PowerOff event
-            break;
-        }
-
-        if (eventStat & 1) {
-            // Smap irq event
-            irq = smap_interrupt();
-
-            CpuSuspendIntr(&oldIntr);
-            smap_intr_interrupt_XXable(1);
-            CpuResumeIntr(oldIntr);
-            dbgprintf("smap irq\n");
-        }
-
-        aliveCounter++;
-
-    } while (1);
-
-
-    printf("Closing smap\n");
-
-    smap_stop();
-
-	disableDev9();
-
-    dbgprintf("Smap thread done!\n");
-
-    ExitDeleteThread();
+	return	1;
 }
 
-//////////////////////////////////////////////////////////////////////////
-// Quickly made (but hopefully working) inet_addr()
-unsigned int
-inet_addr(char *str)
+
+static void
+PrintIP(struct ip_addr const* pAddr)
 {
-    char *cp;
-    char c;
-    unsigned int val;
-    int part;
-    unsigned int address;
-
-
-    cp = str;
-    val = 0;
-    part = 0;
-    address = 0;
-
-    while ((c = *cp) != '\0') {
-        // hm, should fix ctype_table stuff (isdigit for example)
-        if ((c >= '0') && (c <= '9')) {
-            val = (val * 10) + (c - '0');
-            cp++;
-            continue;
-        }
-        if (*cp == '.')
-        {
-            if ((part >= 3) || (val > 255)) {
-                // Illegal
-                return -1;
-            }
-            address |= val << (part * 8);
-            part++;
-            cp++;
-            val = 0;
-        }
-    }
-    address |= val << (part * 8);
-    return address ;
+	printf("%d.%d.%d.%d",(u8)pAddr->addr,(u8)(pAddr->addr>>8),(u8)(pAddr->addr>>16),(u8)(pAddr->addr>>24));
 }
 
-//////////////////////////////////////////////////////////////////////////
-// Initalisation
+
 int
-_start( int argc, char **argv)
+_start(int iArgC,char** ppcArgV)
 {
-   int pid;
-   int i;
-   struct t_thread mythread;
-   struct t_sema sem_info;
-   int sem;
+	IPAddr	IP;
+	IPAddr	NM;
+	IPAddr	GW;
 
-   FlushDcache();
-   CpuEnableIntr(0);
+	dbgprintf("SMAP: argc %d\n",iArgC);
 
+	//Parse IP args.
 
-   printf("SMAP: argc %d\n", argc);
+	if	(iArgC>=4)
+	{
+		dbgprintf("SMAP: %s %s %s\n",ppcArgV[1],ppcArgV[2],ppcArgV[3]);
+		IP.addr=inet_addr(ppcArgV[1]);
+		NM.addr=inet_addr(ppcArgV[2]);
+		GW.addr=inet_addr(ppcArgV[3]);
+	}
+	else
+	{
 
-   if (argc>4)argc=4;
+		//Set some defaults.
 
-   // Parse ip args.. all args or nuthing w/o real error checking..
-   // We really should fix this to some ip= netmask= gw=
-   if (argc == 4) {
-       printf("SMAP: %s %s %s\n", argv[1], argv[2], argv[3]);
-       ipaddr.addr = inet_addr(argv[1]);
-       netmask.addr = inet_addr(argv[2]);
-       gw.addr = inet_addr(argv[3]);
-   }
-   else
-   {
-       // Set some defaults
-       IP4_ADDR(&ipaddr, 192,168,0,80 );
-       IP4_ADDR(&netmask, 255,255,255,0 );
-       IP4_ADDR(&gw, 192,168,0,1);
-   }
+		IP4_ADDR(&IP,192,168,0,80);
+		IP4_ADDR(&NM,255,255,255,0);
+		IP4_ADDR(&GW,192,168,0,1);
+	}
 
-   sem_info.attr = 1;
-   sem_info.option = 1;
-   sem_info.init_count = 0;
-   sem_info.max_count = 1;
+	if	(!SMapInit(IP,NM,GW))
+	{
 
-   sem = CreateSema(&sem_info);
-   if (sem <= 0) {
-       printf( "CreateSema failed %i\n", sem);
-       return 1;
-   }
+		//Something went wrong, return -1 to indicate failure.
 
-   sem_info.attr = 1;
-   sem_info.option = 0;
-   sem_info.init_count = 1;
-   sem_info.max_count = 1;
+		return	-1;
+	}
 
-   ArpMutex = CreateSema(&sem_info);
-   if (ArpMutex <= 0) {
-       printf( "SMAP: CreateSema failed %i\n", ArpMutex);
-       return 1;
-   }
+	printf("SMap: Initialized OK, IP: ");
+	PrintIP(&IP);
+	printf(", NM: ");
+	PrintIP(&NM);
+	printf(", GW: ");
+	PrintIP(&GW);
+	printf("\n");
 
-   // Start smap thread
-   mythread.type = 0x02000000; // attr
-   mythread.unknown = 0; // option
-   mythread.function = smapthread; // entry
-   mythread.stackSize = 0x1000;
-   mythread.priority = 0x27;
+	//Initialized ok.
 
-   pid = CreateThread(&mythread);
-
-   if (pid > 0) {
-       if ((i=StartThread(pid, (void *)sem)) < 0) {
-           printf("StartThread failed (%d)\n", i);
-       }
-   } 
-   else {
-       printf("CreateThread failed (%d)\n", pid);
-   }
-
-   // Dont return until smap has initalized
-   WaitSema(sem);
-   DeleteSema(sem);
-
-   dbgprintf("Smap init done\n");
-   return 0;
+	return	0;
 }
-
