@@ -93,6 +93,7 @@ low_level_init(struct netif *netif)
   struct smapif *smapif;
 
   smapif = netif->state;
+  netif->hwaddr_len = 6;
 
   /* Get MAC address */
   memcpy((unsigned char *)smapif->ethaddr, smap_get_mac(), 6);
