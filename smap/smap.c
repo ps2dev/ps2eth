@@ -1519,7 +1519,7 @@ GetNodeAddr(SMap* pSMap)
 	if	(u16Sum!=u16CHKSum)
 	{
 		dbgprintf("GetNodeAddr: MAC address read error\n");
-		dbgprintf("checksum %04x is read from EEPROM, and %04x is calculated by mac address read now.\n",cksum,sum);
+		dbgprintf("checksum %04x is read from EEPROM, and %04x is calculated by mac address read now.\n",u16CHKSum,u16Sum);
 		PrintMACAddress(pSMap);
 		memset(pSMap->au8HWAddr,0,6);
 		return	-1;
