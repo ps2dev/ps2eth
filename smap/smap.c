@@ -177,6 +177,8 @@ typedef struct SMap
 
 #define	SMAP_BASE			0xb0000000
 
+#define SPD_R_REV_1                     0x02
+
 #define	SMAP_INTR_STAT		0x28
 #define	SMAP_INTR_CLR		0x128
 #define	SMAP_INTR_ENABLE	0x2A
@@ -1094,6 +1096,7 @@ ConfirmAutoNegotiation(SMap* pSMap)
 {
 	int	iA;
 	int	iPhyVal;
+	int     spdrev;
 
 	for	(iA=SMAP_AUTONEGO_TIMEOUT;iA!=0;--iA)
 	{
@@ -1111,6 +1114,15 @@ ConfirmAutoNegotiation(SMap* pSMap)
 		dbgprintf("ConfirmAutoNegotiation: Auto-negotiation timeout, not complete(BMSR=%x)\n",ReadPhy(pSMap,DsPHYTER_ADDRESS,
 																																	 DsPHYTER_BMSR));
 		return	-1;
+	}
+	
+	// **ARGH: UGLY HACK! FIXME! **
+	spdrev = SMAP_REG16(pSMap, SPD_R_REV_1);
+	
+	if (spdrev >= 0x13)
+	{
+		dbgprintf("Disabling autonegotiation sync on v12 - seems to work anyway - beware, hack inside.\n");
+		return  0;
 	}
 
 	//Confirm speed & duplex mode.
