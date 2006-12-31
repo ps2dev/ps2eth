@@ -17,6 +17,7 @@
 #include "smap.h"
 #include "dev9.h"
 
+IRX_ID("smap_driver", 1, 0);
 
 #define	UNKN_1464   *(u16 volatile*)0xbf801464
 
