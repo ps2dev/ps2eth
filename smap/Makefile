@@ -19,7 +19,7 @@ IOP_LDFLAGS += -s
 all: $(IOP_BIN)
 
 clean:
-	-rm -f *.o
+	-rm -f *.o *.irx
 
 include $(PS2SDK)/Defs.make
 include Rules.make
