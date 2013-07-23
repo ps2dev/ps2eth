@@ -144,9 +144,9 @@ void SMapLowLevelInput(PBuf* pBuf)
 	ps2ip_input(pBuf,&NIF);
 }
 
-static inline int SMapInit(IPAddr IP,IPAddr NM,IPAddr GW)
+static inline int SMapInit(IPAddr IP, IPAddr NM, IPAddr GW, int argc, char *argv[])
 {
-	if(smap_init()<0)
+	if(smap_init(argc, argv)<0)
 	{
 		return	0;
 	}
@@ -170,8 +170,7 @@ PrintIP(struct ip_addr const* pAddr)
 	printf("%d.%d.%d.%d",(u8)pAddr->addr,(u8)(pAddr->addr>>8),(u8)(pAddr->addr>>16),(u8)(pAddr->addr>>24));
 }
 
-int
-_start(int iArgC,char** ppcArgV)
+int _start(int argc, char *argv[])
 {
 	IPAddr	IP;
 	IPAddr	NM;
@@ -181,12 +180,12 @@ _start(int iArgC,char** ppcArgV)
 
 	//Parse IP args.
 
-	if	(iArgC>=4)
+	if	(argc>=4)
 	{
-		dbgprintf("SMAP: %s %s %s\n",ppcArgV[1],ppcArgV[2],ppcArgV[3]);
-		IP.addr=inet_addr(ppcArgV[1]);
-		NM.addr=inet_addr(ppcArgV[2]);
-		GW.addr=inet_addr(ppcArgV[3]);
+		dbgprintf("SMAP: %s %s %s\n", argv[1],argv[2],argv[3]);
+		IP.addr=inet_addr(argv[1]);
+		NM.addr=inet_addr(argv[2]);
+		GW.addr=inet_addr(argv[3]);
 	}
 	else
 	{
@@ -198,7 +197,7 @@ _start(int iArgC,char** ppcArgV)
 		IP4_ADDR(&GW,192,168,0,1);
 	}
 
-	if	(!SMapInit(IP,NM,GW))
+	if	(!SMapInit(IP,NM,GW, 0, NULL))
 	{
 
 		//Something went wrong, return 1 to indicate failure.
