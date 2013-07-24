@@ -197,7 +197,7 @@ int _start(int argc, char *argv[])
 		IP4_ADDR(&GW,192,168,0,1);
 	}
 
-	if	(!SMapInit(IP,NM,GW, 0, NULL))
+	if	(!SMapInit(IP,NM,GW, argc-4, &argv[4]))
 	{
 
 		//Something went wrong, return 1 to indicate failure.

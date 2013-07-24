@@ -679,8 +679,6 @@ int smap_init(int argc, char *argv[]){
 	USE_SMAP_RX_BD;
 
 	checksum16=0;
-	argc--;
-	argv++;
 	while(argc>0){
 		if(strcmp("-help", *argv)==0){
 			return DisplayHelpMessage();
@@ -739,7 +737,7 @@ int smap_init(int argc, char *argv[]){
 		argv++;
 	}
 
-	if(argc!=0) return DisplayHelpMessage();
+//	if(argc!=0) return DisplayHelpMessage();
 
 	SmapDriverData.smap_regbase=(volatile u8 *)SMAP_REGBASE;
 	emac3_regbase=SmapDriverData.emac3_regbase=(volatile u8 *)(SMAP_REGBASE + SMAP_EMAC3_REGBASE);

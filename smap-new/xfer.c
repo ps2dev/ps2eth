@@ -61,16 +61,22 @@ inline int HandleRxIntr(struct SmapDriverData *SmapDrivPrivData){
 	volatile u8 *smap_regbase;
 	struct pbuf* pbuf;
 	static unsigned char FrameBuffer[MAX_FRAME_SIZE];
+	unsigned short int ctrl_stat;
 
 	smap_regbase=SmapDrivPrivData->smap_regbase;
 
 	NumPacketsReceived=0;
 
 	while(1){
-		PktBdPtr=&rx_bd[SmapDrivPrivData->RxBDIndex&0x3F];
-		if(!(PktBdPtr->ctrl_stat&SMAP_BD_RX_EMPTY)){
-			if(PktBdPtr->ctrl_stat&(SMAP_BD_RX_INRANGE|SMAP_BD_RX_OUTRANGE|SMAP_BD_RX_FRMTOOLONG|SMAP_BD_RX_BADFCS|SMAP_BD_RX_ALIGNERR|SMAP_BD_RX_SHORTEVNT|SMAP_BD_RX_RUNTFRM|SMAP_BD_RX_OVERRUN) || PktBdPtr->length>MAX_FRAME_SIZE){
-				// Do nothing. TODO: Collect stats like the Sony driver does.
+		PktBdPtr=&rx_bd[SmapDrivPrivData->RxBDIndex&(SMAP_BD_MAX_ENTRY-1)];
+		if(!((ctrl_stat=PktBdPtr->ctrl_stat)&SMAP_BD_RX_EMPTY)){
+			if(ctrl_stat&(SMAP_BD_RX_INRANGE|SMAP_BD_RX_OUTRANGE|SMAP_BD_RX_FRMTOOLONG|SMAP_BD_RX_BADFCS|SMAP_BD_RX_ALIGNERR|SMAP_BD_RX_SHORTEVNT|SMAP_BD_RX_RUNTFRM|SMAP_BD_RX_OVERRUN) || PktBdPtr->length>MAX_FRAME_SIZE){
+				SmapDrivPrivData->RuntimeStats.RxDroppedFrameCount++;
+
+				if(ctrl_stat&SMAP_BD_RX_OVERRUN) SmapDrivPrivData->RuntimeStats.RxFrameOverrunCount++;
+				if(ctrl_stat&(SMAP_BD_RX_INRANGE|SMAP_BD_RX_OUTRANGE|SMAP_BD_RX_FRMTOOLONG|SMAP_BD_RX_SHORTEVNT|SMAP_BD_RX_RUNTFRM)) SmapDrivPrivData->RuntimeStats.RxFrameBadLengthCount++;
+				if(ctrl_stat&SMAP_BD_RX_BADFCS) SmapDrivPrivData->RuntimeStats.RxFrameBadFCSCount++;
+				if(ctrl_stat&SMAP_BD_RX_ALIGNERR) SmapDrivPrivData->RuntimeStats.RxFrameBadAlignmentCount++;
 			}
 			else{
 				if((pbuf=pbuf_alloc(PBUF_RAW, PktBdPtr->length, PBUF_POOL))!=NULL){
@@ -108,13 +114,11 @@ int SMAPSendPacket(const void *data, unsigned int length){
 	u16 BD_data_ptr;
 	unsigned int SizeRounded;
 
-	SaveGP();
-
 	if(SmapDriverData.SmapIsInitialized){
 		ClearEventFlag(SmapDriverData.TxEndEventFlag, ~1);
 
 		SizeRounded=(length+3)&~3;
-		while((SmapDriverData.NumPacketsInTx>=0x40) || (SmapDriverData.TxBufferSpaceAvailable<SizeRounded)){
+		while((SmapDriverData.NumPacketsInTx>=SMAP_BD_MAX_ENTRY) || (SmapDriverData.TxBufferSpaceAvailable<SizeRounded)){
 			WaitEventFlag(SmapDriverData.TxEndEventFlag, 1, WEF_AND|WEF_CLEAR, NULL);
 		}
 
@@ -147,8 +151,6 @@ int SMAPSendPacket(const void *data, unsigned int length){
 		result=1;
 	}
 	else result=-1;
-
-	RestoreGP();
 
 	return result;
 }
