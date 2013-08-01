@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <stdio.h>
+#include <dmacman.h>
 #include <dev9.h>
 #include <intrman.h>
 #include <loadcore.h>
@@ -43,7 +44,7 @@ static inline void CopyFromFIFO(volatile u8 *smap_regbase, void *buffer, unsigne
 
 	SMAP_REG16(SMAP_R_RXFIFO_RD_PTR)=RxBdPtr;
 
-	if((result=SmapDmaTransfer(smap_regbase, buffer, length, 0))<0){
+	if((result=SmapDmaTransfer(smap_regbase, buffer, length, DMAC_TO_MEM))<0){
 		result=0;
 	}
 
@@ -60,7 +61,6 @@ inline int HandleRxIntr(struct SmapDriverData *SmapDrivPrivData){
 	volatile smap_bd_t *PktBdPtr;
 	volatile u8 *smap_regbase;
 	struct pbuf* pbuf;
-	static unsigned char FrameBuffer[MAX_FRAME_SIZE];
 	unsigned short int ctrl_stat;
 
 	smap_regbase=SmapDrivPrivData->smap_regbase;
@@ -80,13 +80,7 @@ inline int HandleRxIntr(struct SmapDriverData *SmapDrivPrivData){
 			}
 			else{
 				if((pbuf=pbuf_alloc(PBUF_RAW, PktBdPtr->length, PBUF_POOL))!=NULL){
-					if((unsigned int)pbuf->payload&3){
-						CopyFromFIFO(SmapDrivPrivData->smap_regbase, FrameBuffer, pbuf->len, PktBdPtr->pointer);
-						memcpy(pbuf->payload, FrameBuffer, pbuf->len);
-					}
-					else{
-						CopyFromFIFO(SmapDrivPrivData->smap_regbase, pbuf->payload, pbuf->len, PktBdPtr->pointer);
-					}
+					CopyFromFIFO(SmapDrivPrivData->smap_regbase, pbuf->payload, pbuf->len, PktBdPtr->pointer);
 
 					//Inform ps2ip that we've received data.
 					SMapLowLevelInput(pbuf);
@@ -126,7 +120,7 @@ int SMAPSendPacket(const void *data, unsigned int length){
 		BD_data_ptr=SMAP_REG16(SMAP_R_TXFIFO_WR_PTR);
 		BD_ptr=&tx_bd[SmapDriverData.TxBDIndex&0x3F];
 
-		if((i=SmapDmaTransfer(SmapDriverData.smap_regbase, (void*)data, length, 1))<0){
+		if((i=SmapDmaTransfer(SmapDriverData.smap_regbase, (void*)data, length, DMAC_FROM_MEM))<0){
 			i=0;
 		}
 
@@ -154,4 +148,3 @@ int SMAPSendPacket(const void *data, unsigned int length){
 
 	return result;
 }
-
