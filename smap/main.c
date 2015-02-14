@@ -414,7 +414,8 @@ SMapIFInit(NetIF* pNetIF)
 	pNetIF->name[1]=IFNAME1;
 	pNetIF->output=SMapOutput;
 	pNetIF->linkoutput=SMapLowLevelOutput;
-	pNetIF->hwaddr_len=6;
+	pNetIF->hwaddr_len=NETIF_MAX_HWADDR_LEN;
+	pNetIF->flags|=(NETIF_FLAG_LINK_UP|NETIF_FLAG_BROADCAST);
 	pNetIF->mtu=1500;
 
 	//Get MAC address.
@@ -473,6 +474,7 @@ SMapInit(IPAddr IP,IPAddr NM,IPAddr GW)
 
 	netif_add(&NIF,&IP,&NM,&GW,NULL,SMapIFInit,tcpip_input);
 	netif_set_default(&NIF);
+	netif_set_up(&NIF);
 	dbgprintf("SMapInit: NetIF added to ps2ip\n");
 
 	//Return 1 (true) to indicate success.

@@ -118,7 +118,9 @@ SMapIFInit(NetIF* pNetIF)
 #endif
 	pNetIF->linkoutput=&SMapLowLevelOutput;
 	pNetIF->hwaddr_len=NETIF_MAX_HWADDR_LEN;
-#ifndef PRE_LWIP_130_COMPAT
+#ifdef PRE_LWIP_130_COMPAT
+	pNetIF->flags|=(NETIF_FLAG_LINK_UP|NETIF_FLAG_BROADCAST);			// For LWIP versions before v1.3.0.
+#else
 	pNetIF->flags|=(NETIF_FLAG_LINK_UP|NETIF_FLAG_ETHARP|NETIF_FLAG_BROADCAST);	// For LWIP v1.3.0 and later.
 #endif
 	pNetIF->mtu=1500;
@@ -154,9 +156,7 @@ static inline int SMapInit(IPAddr IP, IPAddr NM, IPAddr GW, int argc, char *argv
 
 	netif_add(&NIF,&IP,&NM,&GW,NULL,&SMapIFInit,tcpip_input);
 	netif_set_default(&NIF);
-#ifndef PRE_LWIP_130_COMPAT
-	netif_set_up(&NIF);	// For LWIP v1.3.0 and later.
-#endif
+	netif_set_up(&NIF);
 	dbgprintf("SMapInit: NetIF added to ps2ip\n");
 
 	//Return 1 (true) to indicate success.

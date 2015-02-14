@@ -45,14 +45,15 @@ I_ReleaseLibraryEntries
 loadcore_IMPORTS_end
 
 ps2ip_IMPORTS_start
- I_pbuf_alloc
- I_pbuf_free
- I_netif_add
- I_netif_set_default
- I_ps2ip_input
- I_etharp_output
- I_inet_addr
- I_tcpip_input
+I_pbuf_alloc
+I_pbuf_free
+I_netif_add
+I_netif_set_default
+I_netif_set_up
+I_ps2ip_input
+I_etharp_output
+I_inet_addr
+I_tcpip_input
 ps2ip_IMPORTS_end
 
 thsemap_IMPORTS_start
