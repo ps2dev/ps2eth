@@ -131,7 +131,7 @@ SMapIFInit(NetIF* pNetIF)
 				 pNetIF->hwaddr[3],pNetIF->hwaddr[4],pNetIF->hwaddr[5]);
 
 	//Enable sending and receiving of data.
-	SMAPStart();
+	SMAPInitStart();
 
 	RestoreGP();
 

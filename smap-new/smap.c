@@ -466,6 +466,36 @@ static void Dev9PostDmaCbHandler(int bcr, int dir){
 	}
 }
 
+//For the initial startup
+int SMAPInitStart(void){
+	int result;
+	volatile u8 *emac3_regbase;
+
+	SaveGP();
+
+	if(!SmapDriverData.SmapIsInitialized){
+		emac3_regbase=SmapDriverData.emac3_regbase;
+
+		dev9IntrEnable(DEV9_SMAP_INTR_MASK);
+		if((result=InitPHY(&SmapDriverData))==0 && !SmapDriverData.NetDevStopFlag){
+			SMAP_EMAC3_SET(SMAP_R_EMAC3_MODE0, SMAP_E3_TXMAC_ENABLE|SMAP_E3_RXMAC_ENABLE);
+			DelayThread(10000);
+			SmapDriverData.SmapIsInitialized=1;
+
+			if(!SmapDriverData.EnableLinkCheckTimer){
+				USec2SysClock(5000000, &SmapDriverData.LinkCheckTimer);	//Since there isn't a thread that allows the link checking code to determine whether frames were received or not and to check the link status, just reduce the polling frequency.
+				SetAlarm(&SmapDriverData.LinkCheckTimer, (void*)&LinkCheckTimerCB, &SmapDriverData);
+				SmapDriverData.EnableLinkCheckTimer=1;
+			}
+		}
+		else SmapDriverData.NetDevStopFlag=0;
+	}
+
+	RestoreGP();
+
+	return 0;
+}
+
 int SMAPStart(void){
 	SaveGP();
 	SetEventFlag(SmapDriverData.Dev9IntrEventFlag, SMAP_EVENT_START);

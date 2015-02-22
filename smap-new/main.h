@@ -50,6 +50,7 @@ struct SmapDriverData{
 
 /* Function prototypes */
 int smap_init(int argc, char *argv[]);
+int SMAPInitStart(void);
 int SMAPStart(void);
 void SMAPStop(void);
 int SMAPGetMACAddress(unsigned char *buffer);
