@@ -7,10 +7,10 @@
 all: 
 	$(MAKE) -C common
 	$(MAKE) -C smap
-	$(MAKE) -C smap-new
+	$(MAKE) -C smap-linux
 
 clean:
 	$(MAKE) -C bin clean
 	$(MAKE) -C common clean
 	$(MAKE) -C smap clean
-	$(MAKE) -C smap-new clean
+	$(MAKE) -C smap-linux clean

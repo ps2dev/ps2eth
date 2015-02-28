@@ -1,6 +1,6 @@
 #include "common.h"
 
-#define PRE_LWIP_130_COMPAT	1
+//#define PRE_LWIP_130_COMPAT	1
 
 /*
 	Sorry, but even I can't explain the syntax used here. :(
