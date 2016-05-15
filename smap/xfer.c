@@ -103,7 +103,6 @@ int SMAPSendPacket(const void *data, unsigned int length){
 	int result, i, OldState;
 	USE_SMAP_TX_BD;
 	volatile u8 *smap_regbase;
-	volatile u8 *emac3_regbase;
 	volatile smap_bd_t *BD_ptr;
 	u16 BD_data_ptr;
 	unsigned int SizeRounded;
@@ -112,6 +111,9 @@ int SMAPSendPacket(const void *data, unsigned int length){
 		ClearEventFlag(SmapDriverData.TxEndEventFlag, ~1);
 
 		SizeRounded=(length+3)&~3;
+		/*	Unlike the SONY implementation, LWIP expects packet transmission to either
+			always succeed or to fail due to an unrecoverable error. This means that the driver
+			should wait for transmissions to complete, if the Tx buffer is full. */
 		while((SmapDriverData.NumPacketsInTx>=SMAP_BD_MAX_ENTRY) || (SmapDriverData.TxBufferSpaceAvailable<SizeRounded)){
 			WaitEventFlag(SmapDriverData.TxEndEventFlag, 1, WEF_AND|WEF_CLEAR, NULL);
 		}
@@ -139,8 +141,7 @@ int SMAPSendPacket(const void *data, unsigned int length){
 		SmapDriverData.TxBufferSpaceAvailable-=SizeRounded;
 		CpuResumeIntr(OldState);
 
-		emac3_regbase=SmapDriverData.emac3_regbase;
-		SMAP_EMAC3_SET(SMAP_R_EMAC3_TxMODE0, SMAP_E3_TX_GNP_0);
+		SetEventFlag(SmapDriverData.Dev9IntrEventFlag, SMAP_EVENT_XMIT);
 
 		result=1;
 	}
