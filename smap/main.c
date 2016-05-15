@@ -176,7 +176,7 @@ int _start(int argc, char *argv[])
 	IPAddr	NM;
 	IPAddr	GW;
 
-	dbgprintf("SMAP: argc %d\n",iArgC);
+	dbgprintf("SMAP: argc %d\n",argc);
 
 	//Parse IP args.
 

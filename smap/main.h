@@ -1,5 +1,7 @@
-#include "common.h"
+//In the SONY original, all the calls to DEBUG_PRINTF() were to sceInetPrintf().
+#define DEBUG_PRINTF(args...) printf(args)
 
+#define MAX_FRAME_SIZE	1518
 //#define PRE_LWIP_130_COMPAT	1
 
 /*
@@ -15,16 +17,16 @@
 	__asm volatile("move $gp, %0" :: "r"(_ori_gp) : "gp")
 
 struct RuntimeStats{
-	unsigned int RxDroppedFrameCount;
-	unsigned short int RxFrameOverrunCount;
-	unsigned short int RxFrameBadLengthCount;
-	unsigned short int RxFrameBadFCSCount;
-	unsigned short int RxFrameBadAlignmentCount;
-	unsigned int TxDroppedFrameCount;
-	unsigned short int TxFrameLOSSCRCount;
-	unsigned short int TxFrameEDEFERCount;
-	unsigned short int TxFrameCollisionCount;
-	unsigned short int TxFrameUnderrunCount;
+	u32 RxDroppedFrameCount;
+	u16 RxFrameOverrunCount;
+	u16 RxFrameBadLengthCount;
+	u16 RxFrameBadFCSCount;
+	u16 RxFrameBadAlignmentCount;
+	u32 TxDroppedFrameCount;
+	u16 TxFrameLOSSCRCount;
+	u16 TxFrameEDEFERCount;
+	u16 TxFrameCollisionCount;
+	u16 TxFrameUnderrunCount;
 };
 
 struct SmapDriverData{
@@ -40,13 +42,20 @@ struct SmapDriverData{
 	int TxEndEventFlag;
 	int IntrHandlerThreadID;
 	int TxHandlerThreadID;
-	unsigned char SmapIsInitialized;
+	unsigned char SmapIsInitialized;	//SMAP driver is initialized (software)
 	unsigned char NetDevStopFlag;
 	unsigned char EnableLinkCheckTimer;
-	unsigned char LinkStatus;
+	unsigned char LinkStatus;		//Ethernet link is initialized (hardware)
 	unsigned char LinkMode;
 	iop_sys_clock_t LinkCheckTimer;
 };
+
+/* Event flag bits */
+#define SMAP_EVENT_START	0x01
+#define SMAP_EVENT_STOP		0x02
+#define SMAP_EVENT_INTR		0x04
+#define SMAP_EVENT_XMIT		0x08
+#define SMAP_EVENT_LINK_CHECK	0x10
 
 /* Function prototypes */
 int smap_init(int argc, char *argv[]);
