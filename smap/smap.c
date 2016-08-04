@@ -535,7 +535,7 @@ int SMAPInitStart(void){
 			SmapDriverData.SmapIsInitialized=1;
 
 			if(!SmapDriverData.EnableLinkCheckTimer){
-				USec2SysClock(1000000, &SmapDrivPrivData->LinkCheckTimer);
+				USec2SysClock(1000000, &SmapDriverData.LinkCheckTimer);
 				SetAlarm(&SmapDriverData.LinkCheckTimer, (void*)&LinkCheckTimerCB, &SmapDriverData);
 				SmapDriverData.EnableLinkCheckTimer=1;
 			}
