@@ -665,8 +665,6 @@ int smap_init(int argc, char *argv[]){
 	USE_SMAP_RX_BD;
 
 	checksum16=0;
-	argc--;
-	argv++;
 	while(argc>0){
 		if(strcmp("-help", *argv)==0){
 			return DisplayHelpMessage();

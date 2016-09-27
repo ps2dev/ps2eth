@@ -18,7 +18,7 @@
 
 #define dbgprintf(args...) DEBUG_PRINTF(args)
 
-IRX_ID("smap_driver", 2, 0);
+IRX_ID("smap_driver", 2, 1);
 
 #define	IFNAME0	's'
 #define	IFNAME1	'm'
@@ -46,17 +46,19 @@ extern void *_gp;
 static err_t
 SMapLowLevelOutput(NetIF* pNetIF,PBuf* pOutput)
 {
-	int TotalLength;
+	unsigned short int TotalLength;
 	void *buffer;
 	struct pbuf* pbuf;
-	static unsigned char FrameBuffer[MAX_FRAME_SIZE];
+	static u8 FrameBuffer[MAX_FRAME_SIZE];
 
 	SaveGP();
 
-	if(pOutput->next!=NULL || ((unsigned int)pOutput->payload&3)){
+	if(pOutput->next!=NULL || ((unsigned int)pOutput->payload&3))
+	{
 		TotalLength=0;
 		pbuf=pOutput;
-		while(pbuf!=NULL){
+		while(pbuf!=NULL)
+		{
 			memcpy(&FrameBuffer[TotalLength], pbuf->payload, pbuf->len);
 			TotalLength+=pbuf->len;
 			pbuf=pbuf->next;
@@ -64,7 +66,8 @@ SMapLowLevelOutput(NetIF* pNetIF,PBuf* pOutput)
 
 		buffer=FrameBuffer;
 	}
-	else{
+	else
+	{
 		buffer=pOutput->payload;
 		TotalLength=pOutput->tot_len;
 	}
@@ -148,7 +151,7 @@ void SMapLowLevelInput(PBuf* pBuf)
 
 static inline int SMapInit(IPAddr IP, IPAddr NM, IPAddr GW, int argc, char *argv[])
 {
-	if(smap_init(argc, argv)<0)
+	if(smap_init(argc, argv)!=0)
 	{
 		return	0;
 	}
@@ -175,6 +178,8 @@ int _start(int argc, char *argv[])
 	IPAddr	IP;
 	IPAddr	NM;
 	IPAddr	GW;
+	int numArgs;
+	char **pArgv;
 
 	dbgprintf("SMAP: argc %d\n",argc);
 
@@ -186,18 +191,23 @@ int _start(int argc, char *argv[])
 		IP.addr=inet_addr(argv[1]);
 		NM.addr=inet_addr(argv[2]);
 		GW.addr=inet_addr(argv[3]);
+
+		numArgs = argc - 4;
+		pArgv = &argv[4];
 	}
 	else
 	{
-
 		//Set some defaults.
 
 		IP4_ADDR(&IP,192,168,0,80);
 		IP4_ADDR(&NM,255,255,255,0);
 		IP4_ADDR(&GW,192,168,0,1);
+
+		numArgs = argc - 1;
+		pArgv = &argv[1];
 	}
 
-	if	(!SMapInit(IP,NM,GW, argc-4, &argv[4]))
+	if	(!SMapInit(IP,NM,GW, numArgs, pArgv))
 	{
 
 		//Something went wrong, return 1 to indicate failure.
