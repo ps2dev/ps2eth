@@ -39,50 +39,54 @@
 #include "lwip/ip.h"
 
 #ifdef PACK_STRUCT_USE_INCLUDES
-#  include "arch/bpstruct.h"
+#include "arch/bpstruct.h"
 #endif
 PACK_STRUCT_BEGIN
-struct eth_addr {
-  PACK_STRUCT_FIELD(u8_t addr[6]);
+struct eth_addr
+{
+    PACK_STRUCT_FIELD(u8_t addr[6]);
 } PACK_STRUCT_STRUCT;
 PACK_STRUCT_END
 
 PACK_STRUCT_BEGIN
-struct eth_hdr {
-  PACK_STRUCT_FIELD(struct eth_addr dest);
-  PACK_STRUCT_FIELD(struct eth_addr src);
-  PACK_STRUCT_FIELD(u16_t type);
+struct eth_hdr
+{
+    PACK_STRUCT_FIELD(struct eth_addr dest);
+    PACK_STRUCT_FIELD(struct eth_addr src);
+    PACK_STRUCT_FIELD(u16_t type);
 } PACK_STRUCT_STRUCT;
 PACK_STRUCT_END
 
 PACK_STRUCT_BEGIN
 /** the ARP message */
-struct etharp_hdr {
-  PACK_STRUCT_FIELD(struct eth_hdr ethhdr);
-  PACK_STRUCT_FIELD(u16_t hwtype);
-  PACK_STRUCT_FIELD(u16_t proto);
-  PACK_STRUCT_FIELD(u16_t _hwlen_protolen);
-  PACK_STRUCT_FIELD(u16_t opcode);
-  PACK_STRUCT_FIELD(struct eth_addr shwaddr);
-  PACK_STRUCT_FIELD(struct ip_addr sipaddr);
-  PACK_STRUCT_FIELD(struct eth_addr dhwaddr);
-  PACK_STRUCT_FIELD(struct ip_addr dipaddr);
+struct etharp_hdr
+{
+    PACK_STRUCT_FIELD(struct eth_hdr ethhdr);
+    PACK_STRUCT_FIELD(u16_t hwtype);
+    PACK_STRUCT_FIELD(u16_t proto);
+    PACK_STRUCT_FIELD(u16_t _hwlen_protolen);
+    PACK_STRUCT_FIELD(u16_t opcode);
+    PACK_STRUCT_FIELD(struct eth_addr shwaddr);
+    PACK_STRUCT_FIELD(struct ip_addr sipaddr);
+    PACK_STRUCT_FIELD(struct eth_addr dhwaddr);
+    PACK_STRUCT_FIELD(struct ip_addr dipaddr);
 } PACK_STRUCT_STRUCT;
 PACK_STRUCT_END
 
 PACK_STRUCT_BEGIN
-struct ethip_hdr {
-  PACK_STRUCT_FIELD(struct eth_hdr eth);
-  PACK_STRUCT_FIELD(struct ip_hdr ip);
+struct ethip_hdr
+{
+    PACK_STRUCT_FIELD(struct eth_hdr eth);
+    PACK_STRUCT_FIELD(struct ip_hdr ip);
 };
 #ifdef PACK_STRUCT_USE_INCLUDES
-#  include "arch/epstruct.h"
+#include "arch/epstruct.h"
 #endif
 
 #define ARP_TMR_INTERVAL 10000
 
 #define ETHTYPE_ARP 0x0806
-#define ETHTYPE_IP  0x0800
+#define ETHTYPE_IP 0x0800
 
 /* MRB: Moved here so that we don't need lwipopts.h. */
 #define ARP_TABLE_SIZE 10
@@ -91,9 +95,9 @@ void etharp_init(void);
 void etharp_tmr(void);
 struct pbuf *etharp_ip_input(struct netif *netif, struct pbuf *p);
 struct pbuf *etharp_arp_input(struct netif *netif, struct eth_addr *ethaddr,
-			   struct pbuf *p);
+                              struct pbuf *p);
 struct pbuf *etharp_output(struct netif *netif, struct ip_addr *ipaddr,
-			   struct pbuf *q);
+                           struct pbuf *q);
 err_t etharp_query(struct netif *netif, struct ip_addr *ipaddr, struct pbuf *q);
 
 
