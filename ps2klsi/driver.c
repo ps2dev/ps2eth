@@ -30,10 +30,10 @@ typedef unsigned int u_int32_t;
 
 #define ETHER_ADDR_LEN 6
 
-#define NETGEAR_IDVENDOR  0x0846
+#define NETGEAR_IDVENDOR 0x0846
 #define NETGEAR_IDPRODUCT 0x1001
 
-#define THREECOM_IDVENDOR  0x0565
+#define THREECOM_IDVENDOR 0x0565
 #define THREECOM_IDPRODUCT 0x0002
 
 #define BUFLEN 1000
@@ -43,11 +43,11 @@ typedef unsigned int u_int32_t;
 
 static int global;  // A very bad variable name for the DeviceID
 
-static int cepid;   // an equally bad name for the Control End Point.
+static int cepid;  // an equally bad name for the Control End Point.
 
-char   buffer[ BUFLEN ];  // Probably not used. 
+char buffer[BUFLEN];  // Probably not used.
 
-extern  struct ethernetif klsi_etherif;
+extern struct ethernetif klsi_etherif;
 
 
 /*
@@ -56,137 +56,133 @@ extern  struct ethernetif klsi_etherif;
  * 
  * The MAC addresses and IP addresses need to be updated to suite
  * your own environment.
- */ 
-  
+ */
+
 
 struct full_udp
 {
-   u8 usb_len1;
-   u8 usb_len2;
-   u8 eth_dst[6];
-   u8 eth_src[6];
-   u16 eth_type;    // 0x0800
-   u8 ip_ver_hlen;   // 0x45  ( 0x4 is ver 4, 0x05 is len 20 )
-   u8 ip_services;   // 0x00
-   u16 ip_length;    // 0x0042 is 66. 46data + 20 header.
-   u16 ip_id;        // 0xcb5b
-   u8 ip_flags;      // 0x00
-   u8 ip_frag_offset; // 0x0000 
-   u8 ip_ttl;          // 0x80   ttl = 128.
-   u8 ip_protocol;     // 0x11   UDP.
-   u16 ip_chksum;      // 0xedfb  header checksum.
-   struct ip_addr ip_src;
-   struct ip_addr ip_dst;
-   u16 udp_src_port;   // 0x0456 (1110)
-   u16 udp_dst_port;   // 0x0035 (53)
-   u16 udp_len;        // 0x002e (46) 38data + 8 header.
-   u16 udp_chksum;     // 0x7c03
-   u8  data; 
+    u8 usb_len1;
+    u8 usb_len2;
+    u8 eth_dst[6];
+    u8 eth_src[6];
+    u16 eth_type;       // 0x0800
+    u8 ip_ver_hlen;     // 0x45  ( 0x4 is ver 4, 0x05 is len 20 )
+    u8 ip_services;     // 0x00
+    u16 ip_length;      // 0x0042 is 66. 46data + 20 header.
+    u16 ip_id;          // 0xcb5b
+    u8 ip_flags;        // 0x00
+    u8 ip_frag_offset;  // 0x0000
+    u8 ip_ttl;          // 0x80   ttl = 128.
+    u8 ip_protocol;     // 0x11   UDP.
+    u16 ip_chksum;      // 0xedfb  header checksum.
+    struct ip_addr ip_src;
+    struct ip_addr ip_dst;
+    u16 udp_src_port;  // 0x0456 (1110)
+    u16 udp_dst_port;  // 0x0035 (53)
+    u16 udp_len;       // 0x002e (46) 38data + 8 header.
+    u16 udp_chksum;    // 0x7c03
+    u8 data;
 } __attribute((packed));
 
 static u8 udp_buffer[1024];
-static u8 eth_dst[6] = { 0x00, 0xD0, 0x59, 0xB5, 0xF0, 0x84 };
-static u8 eth_src[6] = { 0x00, 0x02, 0xe3, 0x01, 0x82, 0x72 };
+static u8 eth_dst[6] = {0x00, 0xD0, 0x59, 0xB5, 0xF0, 0x84};
+static u8 eth_src[6] = {0x00, 0x02, 0xe3, 0x01, 0x82, 0x72};
 
-u32 chksum( char * data, u16 len )
+u32 chksum(char *data, u16 len)
 {
-  u32 acc = 0;
-  u16 *ptr = (u16 *) data;
+    u32 acc = 0;
+    u16 *ptr = (u16 *)data;
 
-  for ( ; len > 1; len-=2 )
-  {
-     acc += *ptr;
-     ptr++;
-  }
-  if ( len == 1 )
-  {
-     acc += htons((u16)((*(u8 *)ptr) & 0xffU) << 8 );
-  }
-  return acc;
+    for (; len > 1; len -= 2) {
+        acc += *ptr;
+        ptr++;
+    }
+    if (len == 1) {
+        acc += htons((u16)((*(u8 *)ptr) & 0xffU) << 8);
+    }
+    return acc;
 }
 
 static u8 udp_log_init = 0;
 
-void set_udp_log( u8 level )
+void set_udp_log(u8 level)
 {
-  udp_log_init = level;
+    udp_log_init = level;
 }
 
-void udp_log( char * log )
+void udp_log(char *log)
 {
-  struct full_udp * hdrs;
-  u16 log_len = strlen( log );
-  u32 chk_sum = 0;
+    struct full_udp *hdrs;
+    u16 log_len = strlen(log);
+    u32 chk_sum = 0;
 
-  u16 pkt_len = log_len + 20 + 8;
+    u16 pkt_len = log_len + 20 + 8;
 
-  if ( udp_log_init == 0 )
-     return;
+    if (udp_log_init == 0)
+        return;
 
-  hdrs = &(udp_buffer[0]);
-  hdrs->usb_len1 = (u8) (pkt_len+14);
-  hdrs->usb_len2 = (u8) ((pkt_len+14) >> 8 );
+    hdrs = &(udp_buffer[0]);
+    hdrs->usb_len1 = (u8)(pkt_len + 14);
+    hdrs->usb_len2 = (u8)((pkt_len + 14) >> 8);
 
-  hdrs->eth_dst[0] = eth_dst[0];
-  hdrs->eth_dst[1] = eth_dst[1];
-  hdrs->eth_dst[2] = eth_dst[2];
-  hdrs->eth_dst[3] = eth_dst[3];
-  hdrs->eth_dst[4] = eth_dst[4];
-  hdrs->eth_dst[5] = eth_dst[5];
-  
-  hdrs->eth_src[0] = eth_src[0];
-  hdrs->eth_src[1] = eth_src[1];
-  hdrs->eth_src[2] = eth_src[2];
-  hdrs->eth_src[3] = eth_src[3];
-  hdrs->eth_src[4] = eth_src[4];
-  hdrs->eth_src[5] = eth_src[5];
+    hdrs->eth_dst[0] = eth_dst[0];
+    hdrs->eth_dst[1] = eth_dst[1];
+    hdrs->eth_dst[2] = eth_dst[2];
+    hdrs->eth_dst[3] = eth_dst[3];
+    hdrs->eth_dst[4] = eth_dst[4];
+    hdrs->eth_dst[5] = eth_dst[5];
 
-  hdrs->eth_type = htons( 0x800 ); // 0x0800
+    hdrs->eth_src[0] = eth_src[0];
+    hdrs->eth_src[1] = eth_src[1];
+    hdrs->eth_src[2] = eth_src[2];
+    hdrs->eth_src[3] = eth_src[3];
+    hdrs->eth_src[4] = eth_src[4];
+    hdrs->eth_src[5] = eth_src[5];
 
-  hdrs->ip_ver_hlen = 0x45;
-  hdrs->ip_services = 0x00;
-  hdrs->ip_length =  htons( pkt_len );
-  hdrs->ip_id = 0x0000;
-  hdrs->ip_flags = 0x00;
-  hdrs->ip_frag_offset = 0x0000;
-  hdrs->ip_ttl = 0x80;
-  hdrs->ip_protocol = 0x11;
-  hdrs->ip_chksum = 0x0000; // htons( 0xb966 );  // no checksum.
-  IP4_ADDR( &(hdrs->ip_src), 172,16,10,254 );
+    hdrs->eth_type = htons(0x800);  // 0x0800
 
-  IP4_ADDR( &(hdrs->ip_dst), 172,16,10,40 );
+    hdrs->ip_ver_hlen = 0x45;
+    hdrs->ip_services = 0x00;
+    hdrs->ip_length = htons(pkt_len);
+    hdrs->ip_id = 0x0000;
+    hdrs->ip_flags = 0x00;
+    hdrs->ip_frag_offset = 0x0000;
+    hdrs->ip_ttl = 0x80;
+    hdrs->ip_protocol = 0x11;
+    hdrs->ip_chksum = 0x0000;  // htons( 0xb966 );  // no checksum.
+    IP4_ADDR(&(hdrs->ip_src), 172, 16, 10, 254);
 
-  // compute chksum on header.
-  chk_sum = chksum( &(hdrs->ip_ver_hlen) , 20 );
-  while ( chk_sum >> 16 )
-  {
-     chk_sum = (chk_sum & 0x0000ffffUL) + ( chk_sum >> 16 );
-  }
-  hdrs->ip_chksum = ~(chk_sum & 0x0000ffffUL);
+    IP4_ADDR(&(hdrs->ip_dst), 172, 16, 10, 40);
 
-  hdrs->udp_src_port = htons( 0x0456 );
-  hdrs->udp_dst_port = htons( 1110 );
-  hdrs->udp_len = htons(log_len + 8 );
-  hdrs->udp_chksum = 0x0000; // htons( 0x1fcd ); // no checksum.
+    // compute chksum on header.
+    chk_sum = chksum(&(hdrs->ip_ver_hlen), 20);
+    while (chk_sum >> 16) {
+        chk_sum = (chk_sum & 0x0000ffffUL) + (chk_sum >> 16);
+    }
+    hdrs->ip_chksum = ~(chk_sum & 0x0000ffffUL);
 
-  strcpy( &(hdrs->data), log );
+    hdrs->udp_src_port = htons(0x0456);
+    hdrs->udp_dst_port = htons(1110);
+    hdrs->udp_len = htons(log_len + 8);
+    hdrs->udp_chksum = 0x0000;  // htons( 0x1fcd ); // no checksum.
 
-  chk_sum = chksum( (u8 *) &(hdrs->udp_src_port), (u16) log_len+8 );
-  chk_sum+= htons((htonl( hdrs->ip_dst.addr ) & 0xffff0000UL ) >> 16 );
-  chk_sum+= htons((htonl( hdrs->ip_dst.addr ) & 0x0000ffffUL ));
-  chk_sum+= htons((htonl( hdrs->ip_src.addr ) & 0xffff0000UL ) >> 16 );
-  chk_sum+= htons((htonl( hdrs->ip_src.addr ) & 0x0000ffffUL ));
-  chk_sum+= htons(17); //psuedo-header protocol;
-  chk_sum+= htons(8+log_len); //psuedo-header len;
-  while ( chk_sum >> 16 )
-  {
-    chk_sum = (chk_sum & 0x0000ffffUL) + ( chk_sum >> 16 );
-  }
-  hdrs->udp_chksum = ~(chk_sum & 0x0000ffffUL );
+    strcpy(&(hdrs->data), log);
 
-  pkt_len += 14+2;
+    chk_sum = chksum((u8 *)&(hdrs->udp_src_port), (u16)log_len + 8);
+    chk_sum += htons((htonl(hdrs->ip_dst.addr) & 0xffff0000UL) >> 16);
+    chk_sum += htons((htonl(hdrs->ip_dst.addr) & 0x0000ffffUL));
+    chk_sum += htons((htonl(hdrs->ip_src.addr) & 0xffff0000UL) >> 16);
+    chk_sum += htons((htonl(hdrs->ip_src.addr) & 0x0000ffffUL));
+    chk_sum += htons(17);           //psuedo-header protocol;
+    chk_sum += htons(8 + log_len);  //psuedo-header len;
+    while (chk_sum >> 16) {
+        chk_sum = (chk_sum & 0x0000ffffUL) + (chk_sum >> 16);
+    }
+    hdrs->udp_chksum = ~(chk_sum & 0x0000ffffUL);
 
-  kue_do_transfer( klsi_etherif.hout, klsi_etherif.hsemout, udp_buffer, pkt_len);
+    pkt_len += 14 + 2;
+
+    kue_do_transfer(klsi_etherif.hout, klsi_etherif.hsemout, udp_buffer, pkt_len);
 }
 
 
@@ -197,122 +193,120 @@ void udp_log( char * log )
  *                complete.
  */
 
-static void kue_callback( int resultCode, int bytes, void *arg)
+static void kue_callback(int resultCode, int bytes, void *arg)
 {
-  int semh = (int) arg;
-  SignalSema( semh );
+    int semh = (int)arg;
+    SignalSema(semh);
 }
 
 /*
  * kue_do_request - Performs a USB request.
- */ 
+ */
 
-static int kue_do_request( int dev, UsbDeviceRequest *req, void *data)
+static int kue_do_request(int dev, UsbDeviceRequest *req, void *data)
 {
-   struct t_sema sem;
-   int semh;
+    struct t_sema sem;
+    int semh;
 
-   sem.attr = 0;
-   sem.option = 0;
-   sem.init_count = 0;
-   sem.max_count = 1;
+    sem.attr = 0;
+    sem.option = 0;
+    sem.init_count = 0;
+    sem.max_count = 1;
 
-   semh = CreateSema( &sem );
-   UsbTransfer( cepid, data, req->length, req, kue_callback, semh ); 
+    semh = CreateSema(&sem);
+    UsbTransfer(cepid, data, req->length, req, kue_callback, semh);
 
-   WaitSema( semh ); 
+    WaitSema(semh);
 
-   DeleteSema( semh );
+    DeleteSema(semh);
 }
 
 /*
  * keu_transfer_callback, kue_do_transfer - is a generic buffer transfer
  *  to usb.  transferBytes & transferResult are used to transfer info
  *  from callback function back to do_transfer function.
- */ 
+ */
 
 static int transferBytes;
 static int transferResult;
 
-static void kue_transfer_callback( int resultCode, int bytes, void *arg)
+static void kue_transfer_callback(int resultCode, int bytes, void *arg)
 {
-  int semh = (int) arg;
+    int semh = (int)arg;
 
-  transferResult = resultCode;
-  transferBytes = bytes;
+    transferResult = resultCode;
+    transferBytes = bytes;
 
-  SignalSema( semh );
+    SignalSema(semh);
 }
 
-int kue_do_transfer( int epid,int semh, void * data, int len )
+int kue_do_transfer(int epid, int semh, void *data, int len)
 {
-   UsbTransfer( epid, data, len, NULL, kue_transfer_callback, semh ); 
-   WaitSema( semh ); 
+    UsbTransfer(epid, data, len, NULL, kue_transfer_callback, semh);
+    WaitSema(semh);
 
-   if ( transferBytes > 1 )
-   {
-      char * buffer = (char *)data;
-   }
-   return transferBytes;
+    if (transferBytes > 1) {
+        char *buffer = (char *)data;
+    }
+    return transferBytes;
 }
 
 /*
  * kue_setword - Set a USB configuration word
  */
 
-static int kue_setword( u_int8_t breq, u_int16_t word )
+static int kue_setword(u_int8_t breq, u_int16_t word)
 {
-   int dev = global;
-   UsbDeviceRequest req;
+    int dev = global;
+    UsbDeviceRequest req;
 
-   req.requesttype = USB_DIR_OUT | USB_TYPE_VENDOR; 
-   req.request = breq;
-   req.value = word;
-   req.index = 0;
-   req.length = 0;
-   return kue_do_request( dev, &req, NULL );
+    req.requesttype = USB_DIR_OUT | USB_TYPE_VENDOR;
+    req.request = breq;
+    req.value = word;
+    req.index = 0;
+    req.length = 0;
+    return kue_do_request(dev, &req, NULL);
 }
 
 /*
  * kue_ctl - read/write a control variable on USB 
  */
 
-static int kue_ctl( int rw, u_int8_t breq, u_int16_t val, char *data, int len )
+static int kue_ctl(int rw, u_int8_t breq, u_int16_t val, char *data, int len)
 {
-   int dev = global;
-   UsbDeviceRequest req;
+    int dev = global;
+    UsbDeviceRequest req;
 
-   if ( rw == KUE_CTL_WRITE)
-       req.requesttype = USB_DIR_OUT | USB_TYPE_VENDOR;
-   else
-       req.requesttype = USB_DIR_IN | USB_TYPE_VENDOR;
+    if (rw == KUE_CTL_WRITE)
+        req.requesttype = USB_DIR_OUT | USB_TYPE_VENDOR;
+    else
+        req.requesttype = USB_DIR_IN | USB_TYPE_VENDOR;
 
-   req.request = breq;
-   req.value = val;
-   req.index = 0;
-   req.length = len;
+    req.request = breq;
+    req.value = val;
+    req.index = 0;
+    req.length = len;
 
-   return kue_do_request( dev, &req, data );
+    return kue_do_request(dev, &req, data);
 }
 
 
-u_int8_t eaddr[6] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
+u_int8_t eaddr[6] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
 
-static int kue_read_mac( )
+static int kue_read_mac()
 {
-   int err;
-   u_int8_t etherboadcastaddr[] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
+    int err;
+    u_int8_t etherboadcastaddr[] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
 
-   err = kue_ctl( KUE_CTL_READ, KUE_CMD_GET_MAC, 0,
-		(char *)&(eaddr[0]), 6 );
+    err = kue_ctl(KUE_CTL_READ, KUE_CMD_GET_MAC, 0,
+                  (char *)&(eaddr[0]), 6);
 
-   printf( "eaddr: %i:%i:%i:%i:%i:%i\n" , eaddr[0], eaddr[1], eaddr[2], eaddr[3], eaddr[4], eaddr[5] );
-   if ( bcmp( eaddr, etherboadcastaddr, 6 ) )
-   {
-      printf( "read mac ok\n" );
-   }
+    printf("eaddr: %i:%i:%i:%i:%i:%i\n", eaddr[0], eaddr[1], eaddr[2], eaddr[3], eaddr[4], eaddr[5]);
+    if (bcmp(eaddr, etherboadcastaddr, 6)) {
+        printf("read mac ok\n");
+    }
 
-   return 0;
+    return 0;
 }
 
 /* 
@@ -320,65 +314,63 @@ static int kue_read_mac( )
  *   loaded when it is first turned on.  
  */
 
-static int kue_load_fw( )
+static int kue_load_fw()
 {
-   int err;
-   u_int8_t eaddr[6] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
-   u_int8_t etherboadcastaddr[] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
+    int err;
+    u_int8_t eaddr[6] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
+    u_int8_t etherboadcastaddr[] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
 
-   // Code not already loaded.. lets load..
+    // Code not already loaded.. lets load..
 
-   err = kue_ctl( KUE_CTL_WRITE, KUE_CMD_SEND_SCAN, 0,
-		kue_code_seg, sizeof(kue_code_seg));
-   if (err)
-      return -1;  // Failed..
-
-
-   err = kue_ctl( KUE_CTL_WRITE, KUE_CMD_SEND_SCAN, 0,
-		kue_fix_seg, sizeof( kue_fix_seg));
-   if (err)
-      return -1; // Failed..
+    err = kue_ctl(KUE_CTL_WRITE, KUE_CMD_SEND_SCAN, 0,
+                  kue_code_seg, sizeof(kue_code_seg));
+    if (err)
+        return -1;  // Failed..
 
 
-   err = kue_ctl( KUE_CTL_WRITE, KUE_CMD_SEND_SCAN, 0,
-		kue_trig_seg, sizeof( kue_trig_seg));
-   if (err)
-      return -1; // Failed.. 
+    err = kue_ctl(KUE_CTL_WRITE, KUE_CMD_SEND_SCAN, 0,
+                  kue_fix_seg, sizeof(kue_fix_seg));
+    if (err)
+        return -1;  // Failed..
 
-   return 0; // Succesfully loaded.
+
+    err = kue_ctl(KUE_CTL_WRITE, KUE_CMD_SEND_SCAN, 0,
+                  kue_trig_seg, sizeof(kue_trig_seg));
+    if (err)
+        return -1;  // Failed..
+
+    return 0;  // Succesfully loaded.
 }
 
-static void kue_setmulti( )
+static void kue_setmulti()
 {
-
 }
 
 /*
  * kue_reset - reset the ethernet adapter.
  */
 
-static void kue_reset( )
+static void kue_reset()
 {
-   int dev = global;
-   int x;
-   UsbDeviceRequest req;
+    int dev = global;
+    int x;
+    UsbDeviceRequest req;
 
-   // SET CONFIGURATION 
-   req.requesttype = 0;
-   req.request = 9;
-   req.value = 1;
-   req.index = 0;
-   req.length = 0;
+    // SET CONFIGURATION
+    req.requesttype = 0;
+    req.request = 9;
+    req.value = 1;
+    req.index = 0;
+    req.length = 0;
 
-   kue_do_request( dev, &req, NULL );
+    kue_do_request(dev, &req, NULL);
 
-   DelayThread( 2 * 1000 * 1000 );  //Delay 2sec.
-
+    DelayThread(2 * 1000 * 1000);  //Delay 2sec.
 }
 
 
 static struct ip_addr ipaddr, netmask, gw;
-extern void klsi_init( struct netif *netif );
+extern void klsi_init(struct netif *netif);
 extern err_t tcpip_input(struct pbuf *p, struct netif *inp);
 
 /*
@@ -388,37 +380,33 @@ extern err_t tcpip_input(struct pbuf *p, struct netif *inp);
  *   NetGear EA101 Ethernet Adapter or the 3COM USB Ethernet Adapter.
  *   This driver should however work with a number of different USB
  *   NICs using the Kawasaki chipset.
- */ 
+ */
 
-int usb_klsi_probe( int deviceID )
+int usb_klsi_probe(int deviceID)
 {
-  int returnvalue = 0;
-  UsbDeviceDescriptor  *device;
+    int returnvalue = 0;
+    UsbDeviceDescriptor *device;
 
-  global = deviceID;
+    global = deviceID;
 
-  device = (UsbDeviceDescriptor *) 
-  UsbGetDeviceStaticDescriptor( global,0,USB_DT_DEVICE );
+    device = (UsbDeviceDescriptor *)
+        UsbGetDeviceStaticDescriptor(global, 0, USB_DT_DEVICE);
 
-  if ( device != NULL )
-  {
-	 printf("Found USB Device ... VID=0x%04X PID=0x%04X\n",
-		 device->idVendor,device->idProduct);
+    if (device != NULL) {
+        printf("Found USB Device ... VID=0x%04X PID=0x%04X\n",
+               device->idVendor, device->idProduct);
 
-     if ( (device->idVendor == NETGEAR_IDVENDOR) && 
-          (device->idProduct == NETGEAR_IDPRODUCT) )
-     {
-         returnvalue = 1;
-     }
+        if ((device->idVendor == NETGEAR_IDVENDOR) &&
+            (device->idProduct == NETGEAR_IDPRODUCT)) {
+            returnvalue = 1;
+        }
 
-	 if ( (device->idVendor == THREECOM_IDVENDOR) && 
-          (device->idProduct == THREECOM_IDPRODUCT) )
-     {
-         returnvalue = 1;
-     }
-
-  }
-  return returnvalue;
+        if ((device->idVendor == THREECOM_IDVENDOR) &&
+            (device->idProduct == THREECOM_IDPRODUCT)) {
+            returnvalue = 1;
+        }
+    }
+    return returnvalue;
 }
 
 /* 
@@ -427,113 +415,104 @@ int usb_klsi_probe( int deviceID )
  *   It opens the p
  */
 
-int usb_klsi_attach( int deviceID )
+int usb_klsi_attach(int deviceID)
 {
-  UsbDeviceDescriptor    *device;
-  UsbInterfaceDescriptor *id;
-  UsbInterfaceDescriptor *ci;
-  UsbEndpointDescriptor  *eds;
-  UsbEndpointDescriptor  *ed;
-  UsbEndpointDescriptor  *ce;
-  UsbConfigDescriptor    *cd;
-  int i;
-  int x;
-   
+    UsbDeviceDescriptor *device;
+    UsbInterfaceDescriptor *id;
+    UsbInterfaceDescriptor *ci;
+    UsbEndpointDescriptor *eds;
+    UsbEndpointDescriptor *ed;
+    UsbEndpointDescriptor *ce;
+    UsbConfigDescriptor *cd;
+    int i;
+    int x;
 
-  device = (UsbDeviceDescriptor *) UsbGetDeviceStaticDescriptor( global,0,USB_DT_DEVICE );
-  if ( device == NULL )
-  {
-     return -1;
-  }
 
-  id = (UsbInterfaceDescriptor *) UsbGetDeviceStaticDescriptor( global,device,USB_DT_INTERFACE );
-
-  eds = (UsbEndpointDescriptor *) UsbGetDeviceStaticDescriptor( global,id,USB_DT_ENDPOINT);
-
-  for ( i=0; i< id->bNumEndpoints; i++ )
-  {
-     ed = &(eds[i]);
-
-     if ( ed == NULL )
-     {
-        return -1; // Attach Failed.
-     }
-
-     if ( (ed->bEndpointAddress & 0x80) == USB_DIR_IN &&
-          ed->bmAttributes == USB_ENDPOINT_XFER_BULK )
-     {
-        klsi_etherif.epin = i;
-     }
-     else if ( (ed->bEndpointAddress & 0x80) == USB_DIR_OUT &&
-               ed->bmAttributes == USB_ENDPOINT_XFER_BULK )
-     {
-        klsi_etherif.epout = i;
-     }
-     else if ( (ed->bEndpointAddress & 0x80) == USB_DIR_IN &&
-               ed->bmAttributes == USB_ENDPOINT_XFER_INT )
-     {
-        klsi_etherif.epint = i;
-     }
-  }
-
-  cd = (UsbConfigDescriptor *) UsbGetDeviceStaticDescriptor( global,0,USB_DT_CONFIG );
-  if ( cd == NULL )
-     return -1;
-
-  ci = (UsbInterfaceDescriptor *) UsbGetDeviceStaticDescriptor( global,cd,USB_DT_INTERFACE );
-  if ( ci == NULL )
-     return -1;
-
-  ce = (UsbEndpointDescriptor *) UsbGetDeviceStaticDescriptor( global,ci,USB_DT_ENDPOINT);
-  if ( ce == NULL )
-     return -1;
-
-  // Seems that on the NetGear EA101 that the bcdDevice value 
-  // is changed after the firmware is loaded.
-
-  cepid = UsbOpenEndpoint( global, NULL );
- 
-  if (device->bcdDevice != 0x202 )
-  {
-     printf( "loading firmware.\n" );
-
-     if ( kue_load_fw( ) )
+    device = (UsbDeviceDescriptor *)UsbGetDeviceStaticDescriptor(global, 0, USB_DT_DEVICE);
+    if (device == NULL) {
         return -1;
-  }
+    }
 
-  printf( "reseting.\n" );
-  kue_reset( );
- 
-  printf( "reading mac.\n" ); 
-  kue_read_mac( );
+    id = (UsbInterfaceDescriptor *)UsbGetDeviceStaticDescriptor(global, device, USB_DT_INTERFACE);
 
-  printf( "setting mac.\n" );
-  kue_ctl( KUE_CTL_WRITE, KUE_CMD_SET_MAC, 0, eaddr, 6 );
+    eds = (UsbEndpointDescriptor *)UsbGetDeviceStaticDescriptor(global, id, USB_DT_ENDPOINT);
 
-  printf( "configuring.\n" );
-  kue_setword(KUE_CMD_SET_PKT_FILTER, KUE_RXFILT_UNICAST|KUE_RXFILT_BROADCAST|KUE_RXFILT_PROMISC|KUE_RXFILT_ALLMULTI );
-  kue_setword( KUE_CMD_SET_SOFS, 1 );
-  kue_setword( KUE_CMD_SET_URB_SIZE, 64 );
+    for (i = 0; i < id->bNumEndpoints; i++) {
+        ed = &(eds[i]);
 
-  // need to open pipes before adding interface!
-  klsi_etherif.hin = UsbOpenBulkEndpoint( global, &(eds[klsi_etherif.epin]) );
+        if (ed == NULL) {
+            return -1;  // Attach Failed.
+        }
 
-  klsi_etherif.hout = UsbOpenBulkEndpoint( global, &(eds[klsi_etherif.epout]) );
+        if ((ed->bEndpointAddress & 0x80) == USB_DIR_IN &&
+            ed->bmAttributes == USB_ENDPOINT_XFER_BULK) {
+            klsi_etherif.epin = i;
+        } else if ((ed->bEndpointAddress & 0x80) == USB_DIR_OUT &&
+                   ed->bmAttributes == USB_ENDPOINT_XFER_BULK) {
+            klsi_etherif.epout = i;
+        } else if ((ed->bEndpointAddress & 0x80) == USB_DIR_IN &&
+                   ed->bmAttributes == USB_ENDPOINT_XFER_INT) {
+            klsi_etherif.epint = i;
+        }
+    }
 
-  // ipaddr, netmask, and gw now setup in _start from argv
-  netif_add( &ipaddr, &netmask, &gw, NULL, klsi_init, tcpip_input );
+    cd = (UsbConfigDescriptor *)UsbGetDeviceStaticDescriptor(global, 0, USB_DT_CONFIG);
+    if (cd == NULL)
+        return -1;
+
+    ci = (UsbInterfaceDescriptor *)UsbGetDeviceStaticDescriptor(global, cd, USB_DT_INTERFACE);
+    if (ci == NULL)
+        return -1;
+
+    ce = (UsbEndpointDescriptor *)UsbGetDeviceStaticDescriptor(global, ci, USB_DT_ENDPOINT);
+    if (ce == NULL)
+        return -1;
+
+    // Seems that on the NetGear EA101 that the bcdDevice value
+    // is changed after the firmware is loaded.
+
+    cepid = UsbOpenEndpoint(global, NULL);
+
+    if (device->bcdDevice != 0x202) {
+        printf("loading firmware.\n");
+
+        if (kue_load_fw())
+            return -1;
+    }
+
+    printf("reseting.\n");
+    kue_reset();
+
+    printf("reading mac.\n");
+    kue_read_mac();
+
+    printf("setting mac.\n");
+    kue_ctl(KUE_CTL_WRITE, KUE_CMD_SET_MAC, 0, eaddr, 6);
+
+    printf("configuring.\n");
+    kue_setword(KUE_CMD_SET_PKT_FILTER, KUE_RXFILT_UNICAST | KUE_RXFILT_BROADCAST | KUE_RXFILT_PROMISC | KUE_RXFILT_ALLMULTI);
+    kue_setword(KUE_CMD_SET_SOFS, 1);
+    kue_setword(KUE_CMD_SET_URB_SIZE, 64);
+
+    // need to open pipes before adding interface!
+    klsi_etherif.hin = UsbOpenBulkEndpoint(global, &(eds[klsi_etherif.epin]));
+
+    klsi_etherif.hout = UsbOpenBulkEndpoint(global, &(eds[klsi_etherif.epout]));
+
+    // ipaddr, netmask, and gw now setup in _start from argv
+    netif_add(&ipaddr, &netmask, &gw, NULL, klsi_init, tcpip_input);
 
 
-  DelayThread( 2 * 1000 * 1000 ); 
+    DelayThread(2 * 1000 * 1000);
 
-  // Openned connection we can now use UDP debugging.
-  set_udp_log( 1 );
-  //lock_set_out( &udp_log);
+    // Openned connection we can now use UDP debugging.
+    set_udp_log(1);
+    //lock_set_out( &udp_log);
 
-  // Send a message via UDP debugging.
-  //lock_printf( "Hello!" );
+    // Send a message via UDP debugging.
+    //lock_printf( "Hello!" );
 
-  return 0;  // success
+    return 0;  // success
 }
 
 /* 
@@ -541,9 +520,9 @@ int usb_klsi_attach( int deviceID )
  *  this, however for now..  reset the machine. :)
  */
 
-int usb_klsi_detach( int deviceID )
+int usb_klsi_detach(int deviceID)
 {
-  return -1;
+    return -1;
 }
 
 unsigned int
@@ -568,8 +547,7 @@ inet_addr(char *str)
             cp++;
             continue;
         }
-        if (*cp == '.')
-        {
+        if (*cp == '.') {
             if ((part >= 3) || (val > 255)) {
                 // Illegal
                 return -1;
@@ -581,46 +559,42 @@ inet_addr(char *str)
         }
     }
     address |= val << (part * 8);
-    return address ;
+    return address;
 }
 
-UsbDriver usb_probe_ops  __attribute__((aligned(64)));
+UsbDriver usb_probe_ops __attribute__((aligned(64)));
 
-int _start( int argc, char **argv)
+int _start(int argc, char **argv)
 {
-   int ret;
-   void * usb;
-   int i,x;
-   struct t_thread t;
+    int ret;
+    void *usb;
+    int i, x;
+    struct t_thread t;
 
-   printf( "USB KLSI Driver\n" );
+    printf("USB KLSI Driver\n");
 
-   if (argc == 4) {
-       printf("USB NIC: %s %s %s\n", argv[1], argv[2], argv[3]);
-       ipaddr.addr = inet_addr(argv[1]);
-       netmask.addr = inet_addr(argv[2]);
-       gw.addr = inet_addr(argv[3]);
-   }
-   else
-   {
-       // Set some defaults
-       IP4_ADDR(&ipaddr, 192,168,0,80 );
-       IP4_ADDR(&netmask, 255,255,255,0 );
-       IP4_ADDR(&gw, 192,168,0,1);
-   }
+    if (argc == 4) {
+        printf("USB NIC: %s %s %s\n", argv[1], argv[2], argv[3]);
+        ipaddr.addr = inet_addr(argv[1]);
+        netmask.addr = inet_addr(argv[2]);
+        gw.addr = inet_addr(argv[3]);
+    } else {
+        // Set some defaults
+        IP4_ADDR(&ipaddr, 192, 168, 0, 80);
+        IP4_ADDR(&netmask, 255, 255, 255, 0);
+        IP4_ADDR(&gw, 192, 168, 0, 1);
+    }
 
-   usb_probe_ops.name = "klsi";
-   usb_probe_ops.probe = usb_klsi_probe;
-   usb_probe_ops.connect = usb_klsi_attach;
-   usb_probe_ops.disconnect = usb_klsi_detach;
+    usb_probe_ops.name = "klsi";
+    usb_probe_ops.probe = usb_klsi_probe;
+    usb_probe_ops.connect = usb_klsi_attach;
+    usb_probe_ops.disconnect = usb_klsi_detach;
 
-   ret = UsbRegisterDriver( &usb_probe_ops );
-   if ( ret < 0 ) 
-   { 
-      printf( "RegisterLdd returned %i\n", ret );
-   }
+    ret = UsbRegisterDriver(&usb_probe_ops);
+    if (ret < 0) {
+        printf("RegisterLdd returned %i\n", ret);
+    }
 
 
-   return 0;
-} 
-
+    return 0;
+}

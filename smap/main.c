@@ -20,21 +20,21 @@
 
 IRX_ID("smap_driver", 2, 1);
 
-#define	IFNAME0	's'
-#define	IFNAME1	'm'
+#define IFNAME0 's'
+#define IFNAME1 'm'
 
-typedef struct ip_addr	IPAddr;
-typedef struct netif	NetIF;
-typedef struct SMapIF	SMapIF;
-typedef struct pbuf	PBuf;
+typedef struct ip_addr IPAddr;
+typedef struct netif NetIF;
+typedef struct SMapIF SMapIF;
+typedef struct pbuf PBuf;
 
-static NetIF	NIF;
+static NetIF NIF;
 
 //From lwip/err.h and lwip/tcpip.h
 
-#define	ERR_OK		0		//No error, everything OK
-#define	ERR_CONN		-6		//Not connected
-#define	ERR_IF		-11	//Low-level netif error
+#define ERR_OK 0     //No error, everything OK
+#define ERR_CONN -6  //Not connected
+#define ERR_IF -11   //Low-level netif error
 
 extern void *_gp;
 
@@ -44,39 +44,35 @@ extern void *_gp;
 //tcpip-thread.
 
 static err_t
-SMapLowLevelOutput(NetIF* pNetIF,PBuf* pOutput)
+SMapLowLevelOutput(NetIF *pNetIF, PBuf *pOutput)
 {
-	unsigned short int TotalLength;
-	void *buffer;
-	struct pbuf* pbuf;
-	static u8 FrameBuffer[MAX_FRAME_SIZE];
+    unsigned short int TotalLength;
+    void *buffer;
+    struct pbuf *pbuf;
+    static u8 FrameBuffer[MAX_FRAME_SIZE];
 
-	SaveGP();
+    SaveGP();
 
-	if(pOutput->next!=NULL || ((unsigned int)pOutput->payload&3))
-	{
-		TotalLength=0;
-		pbuf=pOutput;
-		while(pbuf!=NULL)
-		{
-			memcpy(&FrameBuffer[TotalLength], pbuf->payload, pbuf->len);
-			TotalLength+=pbuf->len;
-			pbuf=pbuf->next;
-		}
+    if (pOutput->next != NULL || ((unsigned int)pOutput->payload & 3)) {
+        TotalLength = 0;
+        pbuf = pOutput;
+        while (pbuf != NULL) {
+            memcpy(&FrameBuffer[TotalLength], pbuf->payload, pbuf->len);
+            TotalLength += pbuf->len;
+            pbuf = pbuf->next;
+        }
 
-		buffer=FrameBuffer;
-	}
-	else
-	{
-		buffer=pOutput->payload;
-		TotalLength=pOutput->tot_len;
-	}
+        buffer = FrameBuffer;
+    } else {
+        buffer = pOutput->payload;
+        TotalLength = pOutput->tot_len;
+    }
 
-	SMAPSendPacket(buffer, TotalLength);
+    SMAPSendPacket(buffer, TotalLength);
 
-	RestoreGP();
+    RestoreGP();
 
-	return ERR_OK;
+    return ERR_OK;
 }
 
 //SMapOutput():
@@ -86,20 +82,20 @@ SMapLowLevelOutput(NetIF* pNetIF,PBuf* pOutput)
 // For LWIP versions before v1.3.0.
 #ifdef PRE_LWIP_130_COMPAT
 static err_t
-SMapOutput(NetIF* pNetIF,PBuf* pOutput,IPAddr* pIPAddr)
+SMapOutput(NetIF *pNetIF, PBuf *pOutput, IPAddr *pIPAddr)
 {
-	err_t result;
-	PBuf* pBuf;
+    err_t result;
+    PBuf *pBuf;
 
-	SaveGP();
+    SaveGP();
 
-	pBuf=etharp_output(pNetIF,pIPAddr,pOutput);
+    pBuf = etharp_output(pNetIF, pIPAddr, pOutput);
 
-	result=pBuf!=NULL ? SMapLowLevelOutput(pNetIF, pBuf):ERR_OK;
+    result = pBuf != NULL ? SMapLowLevelOutput(pNetIF, pBuf) : ERR_OK;
 
-	RestoreGP();
+    RestoreGP();
 
-	return result;
+    return result;
 }
 #endif
 
@@ -108,121 +104,116 @@ SMapOutput(NetIF* pNetIF,PBuf* pOutput,IPAddr* pIPAddr)
 //Should be called at the beginning of the program to set up the network interface.
 
 static err_t
-SMapIFInit(NetIF* pNetIF)
+SMapIFInit(NetIF *pNetIF)
 {
-	SaveGP();
+    SaveGP();
 
-	pNetIF->name[0]=IFNAME0;
-	pNetIF->name[1]=IFNAME1;
+    pNetIF->name[0] = IFNAME0;
+    pNetIF->name[1] = IFNAME1;
 #ifdef PRE_LWIP_130_COMPAT
-	pNetIF->output=&SMapOutput;	// For LWIP versions before v1.3.0.
+    pNetIF->output = &SMapOutput;  // For LWIP versions before v1.3.0.
 #else
-	pNetIF->output=&etharp_output;	// For LWIP 1.3.0 and later.
+    pNetIF->output = &etharp_output;  // For LWIP 1.3.0 and later.
 #endif
-	pNetIF->linkoutput=&SMapLowLevelOutput;
-	pNetIF->hwaddr_len=NETIF_MAX_HWADDR_LEN;
+    pNetIF->linkoutput = &SMapLowLevelOutput;
+    pNetIF->hwaddr_len = NETIF_MAX_HWADDR_LEN;
 #ifdef PRE_LWIP_130_COMPAT
-	pNetIF->flags|=(NETIF_FLAG_LINK_UP|NETIF_FLAG_BROADCAST);			// For LWIP versions before v1.3.0.
+    pNetIF->flags |= (NETIF_FLAG_LINK_UP | NETIF_FLAG_BROADCAST);  // For LWIP versions before v1.3.0.
 #else
-	pNetIF->flags|=(NETIF_FLAG_LINK_UP|NETIF_FLAG_ETHARP|NETIF_FLAG_BROADCAST);	// For LWIP v1.3.0 and later.
+    pNetIF->flags |= (NETIF_FLAG_LINK_UP | NETIF_FLAG_ETHARP | NETIF_FLAG_BROADCAST);  // For LWIP v1.3.0 and later.
 #endif
-	pNetIF->mtu=1500;
+    pNetIF->mtu = 1500;
 
-	//Get MAC address.
-	SMAPGetMACAddress(pNetIF->hwaddr);
-	dbgprintf("MAC address : %02d:%02d:%02d:%02d:%02d:%02d\n",pNetIF->hwaddr[0],pNetIF->hwaddr[1],pNetIF->hwaddr[2],
-				 pNetIF->hwaddr[3],pNetIF->hwaddr[4],pNetIF->hwaddr[5]);
+    //Get MAC address.
+    SMAPGetMACAddress(pNetIF->hwaddr);
+    dbgprintf("MAC address : %02d:%02d:%02d:%02d:%02d:%02d\n", pNetIF->hwaddr[0], pNetIF->hwaddr[1], pNetIF->hwaddr[2],
+              pNetIF->hwaddr[3], pNetIF->hwaddr[4], pNetIF->hwaddr[5]);
 
-	//Enable sending and receiving of data.
-	SMAPInitStart();
+    //Enable sending and receiving of data.
+    SMAPInitStart();
 
-	RestoreGP();
+    RestoreGP();
 
-	return	ERR_OK;
+    return ERR_OK;
 }
 
-void SMapLowLevelInput(PBuf* pBuf)
+void SMapLowLevelInput(PBuf *pBuf)
 {
-	//When we receive data, the interrupt-handler will invoke this function, which means we are in an interrupt-context. Pass on
-	//the received data to ps2ip.
+    //When we receive data, the interrupt-handler will invoke this function, which means we are in an interrupt-context. Pass on
+    //the received data to ps2ip.
 
-	ps2ip_input(pBuf,&NIF);
+    ps2ip_input(pBuf, &NIF);
 }
 
 static inline int SMapInit(IPAddr IP, IPAddr NM, IPAddr GW, int argc, char *argv[])
 {
-	if(smap_init(argc, argv)!=0)
-	{
-		return	0;
-	}
-	dbgprintf("SMapInit: SMap initialized\n");
+    if (smap_init(argc, argv) != 0) {
+        return 0;
+    }
+    dbgprintf("SMapInit: SMap initialized\n");
 
-	netif_add(&NIF,&IP,&NM,&GW,NULL,&SMapIFInit,tcpip_input);
-	netif_set_default(&NIF);
-	netif_set_up(&NIF);
-	dbgprintf("SMapInit: NetIF added to ps2ip\n");
+    netif_add(&NIF, &IP, &NM, &GW, NULL, &SMapIFInit, tcpip_input);
+    netif_set_default(&NIF);
+    netif_set_up(&NIF);
+    dbgprintf("SMapInit: NetIF added to ps2ip\n");
 
-	//Return 1 (true) to indicate success.
+    //Return 1 (true) to indicate success.
 
-	return	1;
+    return 1;
 }
 
 static void
-PrintIP(struct ip_addr const* pAddr)
+PrintIP(struct ip_addr const *pAddr)
 {
-	printf("%d.%d.%d.%d",(u8)pAddr->addr,(u8)(pAddr->addr>>8),(u8)(pAddr->addr>>16),(u8)(pAddr->addr>>24));
+    printf("%d.%d.%d.%d", (u8)pAddr->addr, (u8)(pAddr->addr >> 8), (u8)(pAddr->addr >> 16), (u8)(pAddr->addr >> 24));
 }
 
 int _start(int argc, char *argv[])
 {
-	IPAddr	IP;
-	IPAddr	NM;
-	IPAddr	GW;
-	int numArgs;
-	char **pArgv;
+    IPAddr IP;
+    IPAddr NM;
+    IPAddr GW;
+    int numArgs;
+    char **pArgv;
 
-	dbgprintf("SMAP: argc %d\n",argc);
+    dbgprintf("SMAP: argc %d\n", argc);
 
-	//Parse IP args.
+    //Parse IP args.
 
-	if	(argc>=4)
-	{
-		dbgprintf("SMAP: %s %s %s\n", argv[1],argv[2],argv[3]);
-		IP.addr=inet_addr(argv[1]);
-		NM.addr=inet_addr(argv[2]);
-		GW.addr=inet_addr(argv[3]);
+    if (argc >= 4) {
+        dbgprintf("SMAP: %s %s %s\n", argv[1], argv[2], argv[3]);
+        IP.addr = inet_addr(argv[1]);
+        NM.addr = inet_addr(argv[2]);
+        GW.addr = inet_addr(argv[3]);
 
-		numArgs = argc - 4;
-		pArgv = &argv[4];
-	}
-	else
-	{
-		//Set some defaults.
+        numArgs = argc - 4;
+        pArgv = &argv[4];
+    } else {
+        //Set some defaults.
 
-		IP4_ADDR(&IP,192,168,0,80);
-		IP4_ADDR(&NM,255,255,255,0);
-		IP4_ADDR(&GW,192,168,0,1);
+        IP4_ADDR(&IP, 192, 168, 0, 80);
+        IP4_ADDR(&NM, 255, 255, 255, 0);
+        IP4_ADDR(&GW, 192, 168, 0, 1);
 
-		numArgs = argc - 1;
-		pArgv = &argv[1];
-	}
+        numArgs = argc - 1;
+        pArgv = &argv[1];
+    }
 
-	if	(!SMapInit(IP,NM,GW, numArgs, pArgv))
-	{
+    if (!SMapInit(IP, NM, GW, numArgs, pArgv)) {
 
-		//Something went wrong, return 1 to indicate failure.
-		return MODULE_NO_RESIDENT_END;
-	}
+        //Something went wrong, return 1 to indicate failure.
+        return MODULE_NO_RESIDENT_END;
+    }
 
-	printf("SMap: Initialized OK, IP: ");
-	PrintIP(&IP);
-	printf(", NM: ");
-	PrintIP(&NM);
-	printf(", GW: ");
-	PrintIP(&GW);
-	printf("\n");
+    printf("SMap: Initialized OK, IP: ");
+    PrintIP(&IP);
+    printf(", NM: ");
+    PrintIP(&NM);
+    printf(", GW: ");
+    PrintIP(&GW);
+    printf("\n");
 
-	//Initialized ok.
+    //Initialized ok.
 
-	return	MODULE_RESIDENT_END;
+    return MODULE_RESIDENT_END;
 }

@@ -45,10 +45,10 @@ u8_t ip_lookup(void *header, struct netif *inp);
 struct netif *ip_route(struct ip_addr *dest);
 err_t ip_input(struct pbuf *p, struct netif *inp);
 err_t ip_output(struct pbuf *p, struct ip_addr *src, struct ip_addr *dest,
-		u8_t ttl, u8_t proto);
+                u8_t ttl, u8_t proto);
 err_t ip_output_if(struct pbuf *p, struct ip_addr *src, struct ip_addr *dest,
-		   u8_t ttl, u8_t proto,
-		   struct netif *netif);
+                   u8_t ttl, u8_t proto,
+                   struct netif *netif);
 
 #define IP_HLEN 20
 
@@ -63,39 +63,40 @@ err_t ip_output_if(struct pbuf *p, struct ip_addr *src, struct ip_addr *dest,
 #ifdef IP_HDRINCL
 #undef IP_HDRINCL
 #endif /* IP_HDRINCL */
-#define IP_HDRINCL  NULL
+#define IP_HDRINCL NULL
 
 #ifdef PACK_STRUCT_USE_INCLUDES
-#  include "arch/bpstruct.h"
+#include "arch/bpstruct.h"
 #endif
 PACK_STRUCT_BEGIN
-struct ip_hdr {
-  /* version / header length / type of service */
-  PACK_STRUCT_FIELD(u16_t _v_hl_tos);
-  /* total length */
-  PACK_STRUCT_FIELD(u16_t _len);
-  /* identification */
-  PACK_STRUCT_FIELD(u16_t _id);
-  /* fragment offset field */
-  PACK_STRUCT_FIELD(u16_t _offset);
-#define IP_RF 0x8000        /* reserved fragment flag */
-#define IP_DF 0x4000        /* dont fragment flag */
-#define IP_MF 0x2000        /* more fragments flag */
-#define IP_OFFMASK 0x1fff   /* mask for fragmenting bits */
-  /* time to live / protocol*/
-  PACK_STRUCT_FIELD(u16_t _ttl_proto);
-  /* checksum */
-  PACK_STRUCT_FIELD(u16_t _chksum);
-  /* source and destination IP addresses */
-  PACK_STRUCT_FIELD(struct ip_addr src);
-  PACK_STRUCT_FIELD(struct ip_addr dest); 
+struct ip_hdr
+{
+    /* version / header length / type of service */
+    PACK_STRUCT_FIELD(u16_t _v_hl_tos);
+    /* total length */
+    PACK_STRUCT_FIELD(u16_t _len);
+    /* identification */
+    PACK_STRUCT_FIELD(u16_t _id);
+    /* fragment offset field */
+    PACK_STRUCT_FIELD(u16_t _offset);
+#define IP_RF 0x8000      /* reserved fragment flag */
+#define IP_DF 0x4000      /* dont fragment flag */
+#define IP_MF 0x2000      /* more fragments flag */
+#define IP_OFFMASK 0x1fff /* mask for fragmenting bits */
+    /* time to live / protocol*/
+    PACK_STRUCT_FIELD(u16_t _ttl_proto);
+    /* checksum */
+    PACK_STRUCT_FIELD(u16_t _chksum);
+    /* source and destination IP addresses */
+    PACK_STRUCT_FIELD(struct ip_addr src);
+    PACK_STRUCT_FIELD(struct ip_addr dest);
 } PACK_STRUCT_STRUCT;
 PACK_STRUCT_END
 #ifdef PACK_STRUCT_USE_INCLUDES
-#  include "arch/epstruct.h"
+#include "arch/epstruct.h"
 #endif
 
-#define IPH_V(hdr)  (ntohs((hdr)->_v_hl_tos) >> 12)
+#define IPH_V(hdr) (ntohs((hdr)->_v_hl_tos) >> 12)
 #define IPH_HL(hdr) ((ntohs((hdr)->_v_hl_tos) >> 8) & 0x0f)
 #define IPH_TOS(hdr) (htons((ntohs((hdr)->_v_hl_tos) & 0xff)))
 #define IPH_LEN(hdr) ((hdr)->_len)
@@ -118,5 +119,3 @@ void ip_debug_print(struct pbuf *p);
 #endif /* IP_DEBUG */
 
 #endif /* __LWIP_IP_H__ */
-
-

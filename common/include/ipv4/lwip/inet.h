@@ -40,8 +40,8 @@
 u16_t inet_chksum(void *dataptr, u16_t len);
 u16_t inet_chksum_pbuf(struct pbuf *p);
 u16_t inet_chksum_pseudo(struct pbuf *p,
-			 struct ip_addr *src, struct ip_addr *dest,
-			 u8_t proto, u16_t proto_len);
+                         struct ip_addr *src, struct ip_addr *dest,
+                         u8_t proto, u16_t proto_len);
 #ifdef htons
 #undef htons
 #endif /* htons */
@@ -68,4 +68,3 @@ u32_t ntohl(u32_t x);
 #endif
 
 #endif /* __LWIP_INET_H__ */
-

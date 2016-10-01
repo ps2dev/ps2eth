@@ -40,133 +40,138 @@
  * which is used to load the firmware.
  */
 
-#define KUE_CMD_GET_ETHER_DESCRIPTOR		0x00
-#define KUE_CMD_SET_MCAST_FILTERS		0x01
-#define KUE_CMD_SET_PKT_FILTER			0x02
-#define KUE_CMD_GET_ETHERSTATS			0x03
-#define KUE_CMD_GET_GPIO			0x04
-#define KUE_CMD_SET_GPIO			0x05
-#define KUE_CMD_SET_MAC				0x06
-#define KUE_CMD_GET_MAC				0x07
-#define KUE_CMD_SET_URB_SIZE			0x08
-#define KUE_CMD_SET_SOFS			0x09
-#define KUE_CMD_SET_EVEN_PKTS			0x0A
-#define KUE_CMD_SEND_SCAN			0xFF
+#define KUE_CMD_GET_ETHER_DESCRIPTOR 0x00
+#define KUE_CMD_SET_MCAST_FILTERS 0x01
+#define KUE_CMD_SET_PKT_FILTER 0x02
+#define KUE_CMD_GET_ETHERSTATS 0x03
+#define KUE_CMD_GET_GPIO 0x04
+#define KUE_CMD_SET_GPIO 0x05
+#define KUE_CMD_SET_MAC 0x06
+#define KUE_CMD_GET_MAC 0x07
+#define KUE_CMD_SET_URB_SIZE 0x08
+#define KUE_CMD_SET_SOFS 0x09
+#define KUE_CMD_SET_EVEN_PKTS 0x0A
+#define KUE_CMD_SEND_SCAN 0xFF
 
-struct kue_ether_desc {
-	u_int8_t		kue_len;
-	u_int8_t		kue_rsvd0;
-	u_int8_t		kue_rsvd1;
-	u_int8_t		kue_macaddr[ETHER_ADDR_LEN];
-	u_int8_t		kue_etherstats[4];
-	u_int8_t		kue_maxseg[2];
-	u_int8_t		kue_mcastfilt[2];
-	u_int8_t		kue_rsvd2;
+struct kue_ether_desc
+{
+    u_int8_t kue_len;
+    u_int8_t kue_rsvd0;
+    u_int8_t kue_rsvd1;
+    u_int8_t kue_macaddr[ETHER_ADDR_LEN];
+    u_int8_t kue_etherstats[4];
+    u_int8_t kue_maxseg[2];
+    u_int8_t kue_mcastfilt[2];
+    u_int8_t kue_rsvd2;
 };
 
-#define KUE_ETHERSTATS(x)	\
-	(*(u_int32_t *)&(x)->kue_desc.kue_etherstats)
-#define KUE_MAXSEG(x)		\
-	(*(u_int16_t *)&(x)->kue_desc.kue_maxseg)
-#define KUE_MCFILTCNT(x)	\
-	((*(u_int16_t *)&(x)->kue_desc.kue_mcastfilt) & 0x7FFF)
-#define KUE_MCFILT(x, y)	\
-	(char *)&(sc->kue_mcfilters[y * ETHER_ADDR_LEN])
+#define KUE_ETHERSTATS(x) \
+    (*(u_int32_t *)&(x)->kue_desc.kue_etherstats)
+#define KUE_MAXSEG(x) \
+    (*(u_int16_t *)&(x)->kue_desc.kue_maxseg)
+#define KUE_MCFILTCNT(x) \
+    ((*(u_int16_t *)&(x)->kue_desc.kue_mcastfilt) & 0x7FFF)
+#define KUE_MCFILT(x, y) \
+    (char *)&(sc->kue_mcfilters[y * ETHER_ADDR_LEN])
 
-#define KUE_STAT_TX_OK			0x00000001
-#define KUE_STAT_RX_OK			0x00000002
-#define KUE_STAT_TX_ERR			0x00000004
-#define KUE_STAT_RX_ERR			0x00000008
-#define KUE_STAT_RX_NOBUF		0x00000010
-#define KUE_STAT_TX_UCAST_BYTES		0x00000020
-#define KUE_STAT_TX_UCAST_FRAMES	0x00000040
-#define KUE_STAT_TX_MCAST_BYTES		0x00000080
-#define KUE_STAT_TX_MCAST_FRAMES	0x00000100
-#define KUE_STAT_TX_BCAST_BYTES		0x00000200
-#define KUE_STAT_TX_BCAST_FRAMES	0x00000400
-#define KUE_STAT_RX_UCAST_BYTES		0x00000800
-#define KUE_STAT_RX_UCAST_FRAMES	0x00001000
-#define KUE_STAT_RX_MCAST_BYTES		0x00002000
-#define KUE_STAT_RX_MCAST_FRAMES	0x00004000
-#define KUE_STAT_RX_BCAST_BYTES		0x00008000
-#define KUE_STAT_RX_BCAST_FRAMES	0x00010000
-#define KUE_STAT_RX_CRCERR		0x00020000
-#define KUE_STAT_TX_QUEUE_LENGTH	0x00040000
-#define KUE_STAT_RX_ALIGNERR		0x00080000
-#define KUE_STAT_TX_SINGLECOLL		0x00100000
-#define KUE_STAT_TX_MULTICOLL		0x00200000
-#define KUE_STAT_TX_DEFERRED		0x00400000
-#define KUE_STAT_TX_MAXCOLLS		0x00800000
-#define KUE_STAT_RX_OVERRUN		0x01000000
-#define KUE_STAT_TX_UNDERRUN		0x02000000
-#define KUE_STAT_TX_SQE_ERR		0x04000000
-#define KUE_STAT_TX_CARRLOSS		0x08000000
-#define KUE_STAT_RX_LATECOLL		0x10000000
+#define KUE_STAT_TX_OK 0x00000001
+#define KUE_STAT_RX_OK 0x00000002
+#define KUE_STAT_TX_ERR 0x00000004
+#define KUE_STAT_RX_ERR 0x00000008
+#define KUE_STAT_RX_NOBUF 0x00000010
+#define KUE_STAT_TX_UCAST_BYTES 0x00000020
+#define KUE_STAT_TX_UCAST_FRAMES 0x00000040
+#define KUE_STAT_TX_MCAST_BYTES 0x00000080
+#define KUE_STAT_TX_MCAST_FRAMES 0x00000100
+#define KUE_STAT_TX_BCAST_BYTES 0x00000200
+#define KUE_STAT_TX_BCAST_FRAMES 0x00000400
+#define KUE_STAT_RX_UCAST_BYTES 0x00000800
+#define KUE_STAT_RX_UCAST_FRAMES 0x00001000
+#define KUE_STAT_RX_MCAST_BYTES 0x00002000
+#define KUE_STAT_RX_MCAST_FRAMES 0x00004000
+#define KUE_STAT_RX_BCAST_BYTES 0x00008000
+#define KUE_STAT_RX_BCAST_FRAMES 0x00010000
+#define KUE_STAT_RX_CRCERR 0x00020000
+#define KUE_STAT_TX_QUEUE_LENGTH 0x00040000
+#define KUE_STAT_RX_ALIGNERR 0x00080000
+#define KUE_STAT_TX_SINGLECOLL 0x00100000
+#define KUE_STAT_TX_MULTICOLL 0x00200000
+#define KUE_STAT_TX_DEFERRED 0x00400000
+#define KUE_STAT_TX_MAXCOLLS 0x00800000
+#define KUE_STAT_RX_OVERRUN 0x01000000
+#define KUE_STAT_TX_UNDERRUN 0x02000000
+#define KUE_STAT_TX_SQE_ERR 0x04000000
+#define KUE_STAT_TX_CARRLOSS 0x08000000
+#define KUE_STAT_RX_LATECOLL 0x10000000
 
-#define KUE_RXFILT_PROMISC		0x0001
-#define KUE_RXFILT_ALLMULTI		0x0002
-#define KUE_RXFILT_UNICAST		0x0004
-#define KUE_RXFILT_BROADCAST		0x0008
-#define KUE_RXFILT_MULTICAST		0x0010
+#define KUE_RXFILT_PROMISC 0x0001
+#define KUE_RXFILT_ALLMULTI 0x0002
+#define KUE_RXFILT_UNICAST 0x0004
+#define KUE_RXFILT_BROADCAST 0x0008
+#define KUE_RXFILT_MULTICAST 0x0010
 
-#define KUE_TIMEOUT		1000
-#define ETHER_ALIGN		2
-#define KUE_BUFSZ		1536
-#define KUE_CUTOFF		1088
-#define KUE_MIN_FRAMELEN	60
+#define KUE_TIMEOUT 1000
+#define ETHER_ALIGN 2
+#define KUE_BUFSZ 1536
+#define KUE_CUTOFF 1088
+#define KUE_MIN_FRAMELEN 60
 
-#define KUE_RX_LIST_CNT		1
-#define KUE_TX_LIST_CNT		1
+#define KUE_RX_LIST_CNT 1
+#define KUE_TX_LIST_CNT 1
 
-#define KUE_CTL_READ		0x01
-#define KUE_CTL_WRITE		0x02
+#define KUE_CTL_READ 0x01
+#define KUE_CTL_WRITE 0x02
 
 /*
  * The interrupt endpoint is currently unused
  * by the KLSI part.
  */
-#define KUE_ENDPT_RX		0x0
-#define KUE_ENDPT_TX		0x1
-#define KUE_ENDPT_INTR		0x2
-#define KUE_ENDPT_MAX		0x3
+#define KUE_ENDPT_RX 0x0
+#define KUE_ENDPT_TX 0x1
+#define KUE_ENDPT_INTR 0x2
+#define KUE_ENDPT_MAX 0x3
 
-struct kue_type {
-	u_int16_t		kue_vid;
-	u_int16_t		kue_did;
-	char			*kue_name;
+struct kue_type
+{
+    u_int16_t kue_vid;
+    u_int16_t kue_did;
+    char *kue_name;
 };
 
 struct kue_softc;
 
-struct kue_chain {
-	struct kue_softc	*kue_sc;
-//	usbd_xfer_handle	kue_xfer;
-	char			*kue_buf;
-//	struct mbuf		*kue_mbuf;
-	int			kue_idx;
+struct kue_chain
+{
+    struct kue_softc *kue_sc;
+    //	usbd_xfer_handle	kue_xfer;
+    char *kue_buf;
+    //	struct mbuf		*kue_mbuf;
+    int kue_idx;
 };
 
-struct kue_cdata {
-	struct kue_chain	kue_tx_chain[KUE_TX_LIST_CNT];
-	struct kue_chain	kue_rx_chain[KUE_RX_LIST_CNT];
-	int			kue_tx_prod;
-	int			kue_tx_cons;
-	int			kue_tx_cnt;
-	int			kue_rx_prod;
+struct kue_cdata
+{
+    struct kue_chain kue_tx_chain[KUE_TX_LIST_CNT];
+    struct kue_chain kue_rx_chain[KUE_RX_LIST_CNT];
+    int kue_tx_prod;
+    int kue_tx_cons;
+    int kue_tx_cnt;
+    int kue_rx_prod;
 };
 
-#define KUE_INC(x, y)		(x) = (x + 1) % y
+#define KUE_INC(x, y) (x) = (x + 1) % y
 
-struct kue_softc {
-//	struct arpcom		arpcom;
-//	usbd_device_handle	kue_udev;
-//	usbd_interface_handle	kue_iface;
-	struct kue_ether_desc	kue_desc;
-	int			kue_ed[KUE_ENDPT_MAX];
-//	usbd_pipe_handle	kue_ep[KUE_ENDPT_MAX];
-	int			kue_unit;
-	int			kue_if_flags;
-	u_int16_t		kue_rxfilt;
-	u_int8_t		*kue_mcfilters;
-//	struct kue_cdata	kue_cdata;
+struct kue_softc
+{
+    //	struct arpcom		arpcom;
+    //	usbd_device_handle	kue_udev;
+    //	usbd_interface_handle	kue_iface;
+    struct kue_ether_desc kue_desc;
+    int kue_ed[KUE_ENDPT_MAX];
+    //	usbd_pipe_handle	kue_ep[KUE_ENDPT_MAX];
+    int kue_unit;
+    int kue_if_flags;
+    u_int16_t kue_rxfilt;
+    u_int8_t *kue_mcfilters;
+    //	struct kue_cdata	kue_cdata;
 };
