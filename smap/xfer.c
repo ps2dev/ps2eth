@@ -61,7 +61,7 @@ inline int HandleRxIntr(struct SmapDriverData *SmapDrivPrivData){
 	volatile smap_bd_t *PktBdPtr;
 	volatile u8 *smap_regbase;
 	struct pbuf* pbuf;
-	unsigned short int ctrl_stat;
+	u16 ctrl_stat;
 
 	smap_regbase=SmapDrivPrivData->smap_regbase;
 

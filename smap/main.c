@@ -23,7 +23,7 @@ IRX_ID("smap_driver", 2, 1);
 #define	IFNAME0	's'
 #define	IFNAME1	'm'
 
-typedef struct ip_addr	IPAddr;
+typedef struct ip4_addr	IPAddr;
 typedef struct netif	NetIF;
 typedef struct SMapIF	SMapIF;
 typedef struct pbuf	PBuf;
@@ -47,13 +47,12 @@ static err_t
 SMapLowLevelOutput(NetIF* pNetIF,PBuf* pOutput)
 {
 	unsigned short int TotalLength;
-	void *buffer;
 	struct pbuf* pbuf;
 	static u8 FrameBuffer[MAX_FRAME_SIZE];
 
 	SaveGP();
 
-	if(pOutput->next!=NULL || ((unsigned int)pOutput->payload&3))
+	if(pOutput->next!=NULL)
 	{
 		TotalLength=0;
 		pbuf=pOutput;
@@ -64,15 +63,12 @@ SMapLowLevelOutput(NetIF* pNetIF,PBuf* pOutput)
 			pbuf=pbuf->next;
 		}
 
-		buffer=FrameBuffer;
+		SMAPSendPacket(FrameBuffer, TotalLength);
 	}
 	else
 	{
-		buffer=pOutput->payload;
-		TotalLength=pOutput->tot_len;
+		SMAPSendPacket(pOutput->payload, pOutput->len);
 	}
-
-	SMAPSendPacket(buffer, TotalLength);
 
 	RestoreGP();
 
@@ -168,7 +164,7 @@ static inline int SMapInit(IPAddr IP, IPAddr NM, IPAddr GW, int argc, char *argv
 }
 
 static void
-PrintIP(struct ip_addr const* pAddr)
+PrintIP(struct ip4_addr const* pAddr)
 {
 	printf("%d.%d.%d.%d",(u8)pAddr->addr,(u8)(pAddr->addr>>8),(u8)(pAddr->addr>>16),(u8)(pAddr->addr>>24));
 }
