@@ -63,6 +63,8 @@ int SMAPInitStart(void);
 int SMAPStart(void);
 void SMAPStop(void);
 int SMAPGetMACAddress(unsigned char *buffer);
+void PS2IPLinkStateUp(void);
+void PS2IPLinkStateDown(void);
 
 void SMapLowLevelInput(struct pbuf* pBuf);
 

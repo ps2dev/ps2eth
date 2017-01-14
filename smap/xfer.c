@@ -133,7 +133,7 @@ int SMAPSendPacket(const void *data, unsigned int length){
 		BD_ptr->length=length;
 		BD_ptr->pointer=BD_data_ptr;
 		SMAP_REG8(SMAP_R_TXFIFO_FRAME_INC)=0;
-		BD_ptr->ctrl_stat=SMAP_BD_TX_READY|SMAP_BD_TX_GENFCS|SMAP_BD_TX_GENPAD;	/* 0x8300 */
+		BD_ptr->ctrl_stat=SMAP_BD_TX_READY|SMAP_BD_TX_GENFCS|SMAP_BD_TX_GENPAD;
 		SmapDriverData.TxBDIndex++;
 
 		CpuSuspendIntr(&OldState);

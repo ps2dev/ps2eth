@@ -18,7 +18,7 @@
 
 #define dbgprintf(args...) DEBUG_PRINTF(args)
 
-IRX_ID("smap_driver", 2, 1);
+IRX_ID("smap_driver", 2, 2);
 
 #define	IFNAME0	's'
 #define	IFNAME1	'm'
@@ -118,15 +118,15 @@ SMapIFInit(NetIF* pNetIF)
 	pNetIF->linkoutput=&SMapLowLevelOutput;
 	pNetIF->hwaddr_len=NETIF_MAX_HWADDR_LEN;
 #ifdef PRE_LWIP_130_COMPAT
-	pNetIF->flags|=(NETIF_FLAG_LINK_UP|NETIF_FLAG_BROADCAST);			// For LWIP versions before v1.3.0.
+	pNetIF->flags|=(NETIF_FLAG_LINK_UP|NETIF_FLAG_BROADCAST);	// For LWIP versions before v1.3.0.
 #else
-	pNetIF->flags|=(NETIF_FLAG_LINK_UP|NETIF_FLAG_ETHARP|NETIF_FLAG_BROADCAST);	// For LWIP v1.3.0 and later.
+	pNetIF->flags|=(NETIF_FLAG_ETHARP|NETIF_FLAG_BROADCAST);	// For LWIP v1.3.0 and later.
 #endif
 	pNetIF->mtu=1500;
 
 	//Get MAC address.
 	SMAPGetMACAddress(pNetIF->hwaddr);
-	dbgprintf("MAC address : %02d:%02d:%02d:%02d:%02d:%02d\n",pNetIF->hwaddr[0],pNetIF->hwaddr[1],pNetIF->hwaddr[2],
+	dbgprintf("MAC address : %02x:%02x:%02x:%02x:%02x:%02x\n",pNetIF->hwaddr[0],pNetIF->hwaddr[1],pNetIF->hwaddr[2],
 				 pNetIF->hwaddr[3],pNetIF->hwaddr[4],pNetIF->hwaddr[5]);
 
 	//Enable sending and receiving of data.
@@ -145,7 +145,7 @@ void SMapLowLevelInput(PBuf* pBuf)
 	ps2ip_input(pBuf,&NIF);
 }
 
-static inline int SMapInit(IPAddr IP, IPAddr NM, IPAddr GW, int argc, char *argv[])
+static inline int SMapInit(IPAddr *IP, IPAddr *NM, IPAddr *GW, int argc, char *argv[])
 {
 	if(smap_init(argc, argv)!=0)
 	{
@@ -153,7 +153,7 @@ static inline int SMapInit(IPAddr IP, IPAddr NM, IPAddr GW, int argc, char *argv
 	}
 	dbgprintf("SMapInit: SMap initialized\n");
 
-	netif_add(&NIF,&IP,&NM,&GW,NULL,&SMapIFInit,tcpip_input);
+	netif_add(&NIF, IP, NM, GW, &NIF, &SMapIFInit, tcpip_input);
 	netif_set_default(&NIF);
 	netif_set_up(&NIF);
 	dbgprintf("SMapInit: NetIF added to ps2ip\n");
@@ -167,6 +167,16 @@ static void
 PrintIP(struct ip4_addr const* pAddr)
 {
 	printf("%d.%d.%d.%d",(u8)pAddr->addr,(u8)(pAddr->addr>>8),(u8)(pAddr->addr>>16),(u8)(pAddr->addr>>24));
+}
+
+void PS2IPLinkStateUp(void)
+{
+	tcpip_callback((void*)&netif_set_link_up, &NIF);
+}
+
+void PS2IPLinkStateDown(void)
+{
+	tcpip_callback((void*)&netif_set_link_down, &NIF);
 }
 
 int _start(int argc, char *argv[])
@@ -203,7 +213,7 @@ int _start(int argc, char *argv[])
 		pArgv = &argv[1];
 	}
 
-	if	(!SMapInit(IP,NM,GW, numArgs, pArgv))
+	if	(!SMapInit(&IP,&NM,&GW, numArgs, pArgv))
 	{
 
 		//Something went wrong, return 1 to indicate failure.

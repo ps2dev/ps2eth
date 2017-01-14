@@ -333,11 +333,9 @@ static unsigned int LinkCheckTimerCB(struct SmapDriverData *SmapDrivPrivData){
 
 static int HandleTxIntr(struct SmapDriverData *SmapDrivPrivData){
 	int result, OldState;
-	volatile u8 *smap_regbase;
 	USE_SMAP_TX_BD;
 	unsigned short int ctrl_stat;
 
-	smap_regbase=SmapDrivPrivData->smap_regbase;
 	result=0;
 	if(SmapDrivPrivData->NumPacketsInTx>0){
 		do{
@@ -372,7 +370,9 @@ static void CheckLinkStatus(struct SmapDriverData *SmapDrivPrivData){
 	if(!(_smap_read_phy(SmapDrivPrivData->emac3_regbase, SMAP_DsPHYTER_BMSR)&SMAP_PHY_BMSR_LINK)){
 		//Link lost
 		SmapDrivPrivData->LinkStatus=0;
-		InitPHY(SmapDrivPrivData);
+		PS2IPLinkStateDown();
+		if(InitPHY(SmapDrivPrivData) == 0)
+			PS2IPLinkStateUp();
 	}
 }
 
@@ -396,6 +396,7 @@ static void IntrHandlerThread(struct SmapDriverData *SmapDrivPrivData){
 				SmapDrivPrivData->NetDevStopFlag=0;
 				SmapDrivPrivData->LinkStatus=0;
 				SmapDrivPrivData->SmapIsInitialized=0;
+				PS2IPLinkStateDown();
 			}
 		}
 		if(EFBits&SMAP_EVENT_START){
@@ -410,6 +411,8 @@ static void IntrHandlerThread(struct SmapDriverData *SmapDrivPrivData){
 				SMAP_EMAC3_SET(SMAP_R_EMAC3_MODE0, SMAP_E3_TXMAC_ENABLE|SMAP_E3_RXMAC_ENABLE);
 				DelayThread(10000);
 				SmapDrivPrivData->SmapIsInitialized=1;
+
+				PS2IPLinkStateUp();
 
 				if(!SmapDrivPrivData->EnableLinkCheckTimer){
 					USec2SysClock(1000000, &SmapDrivPrivData->LinkCheckTimer);
@@ -533,6 +536,8 @@ int SMAPInitStart(void){
 			SMAP_EMAC3_SET(SMAP_R_EMAC3_MODE0, SMAP_E3_TXMAC_ENABLE|SMAP_E3_RXMAC_ENABLE);
 			DelayThread(10000);
 			SmapDriverData.SmapIsInitialized=1;
+
+			PS2IPLinkStateUp();
 
 			if(!SmapDriverData.EnableLinkCheckTimer){
 				USec2SysClock(1000000, &SmapDriverData.LinkCheckTimer);
