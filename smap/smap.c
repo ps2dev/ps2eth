@@ -7,6 +7,7 @@
 #include <modload.h>
 #include <stdio.h>
 #include <sysclib.h>
+#include <ctype.h>
 #include <thbase.h>
 #include <thevent.h>
 #include <thsemap.h>
@@ -64,11 +65,12 @@ static unsigned int SmapConfiguration=0x5E0;
 
 extern void *_gp;
 
-static void _smap_write_phy(volatile u8 *emac3_regbase, unsigned char address, unsigned short int value){
-	unsigned int i, PHYRegisterValue;
+static void _smap_write_phy(volatile u8 *emac3_regbase, unsigned int address, u16 value){
+	u32 PHYRegisterValue;
+	unsigned int i;
 
 	PHYRegisterValue=(address&SMAP_E3_PHY_REG_ADDR_MSK)|SMAP_E3_PHY_WRITE|((SMAP_DsPHYTER_ADDRESS&SMAP_E3_PHY_ADDR_MSK)<<SMAP_E3_PHY_ADDR_BITSFT);
-	PHYRegisterValue|=((unsigned int)value)<<SMAP_E3_PHY_DATA_BITSFT;
+	PHYRegisterValue|=((u32)value)<<SMAP_E3_PHY_DATA_BITSFT;
 
 	i=0;
 	SMAP_EMAC3_SET(SMAP_R_EMAC3_STA_CTRL, PHYRegisterValue);
@@ -81,9 +83,10 @@ static void _smap_write_phy(volatile u8 *emac3_regbase, unsigned char address, u
 	if(i>=100) printf("smap: %s: > %d ms\n", "_smap_write_phy", i);
 }
 
-static int _smap_read_phy(volatile u8 *emac3_regbase, unsigned int address){
-	unsigned int i, PHYRegisterValue;
-	int result;
+static u16 _smap_read_phy(volatile u8 *emac3_regbase, unsigned int address){
+	unsigned int i;
+	u32 value, PHYRegisterValue;
+	u16 result;
 
 	PHYRegisterValue=(address&SMAP_E3_PHY_REG_ADDR_MSK)|SMAP_E3_PHY_READ|((SMAP_DsPHYTER_ADDRESS&SMAP_E3_PHY_ADDR_MSK)<<SMAP_E3_PHY_ADDR_BITSFT);
 
@@ -94,8 +97,8 @@ static int _smap_read_phy(volatile u8 *emac3_regbase, unsigned int address){
 	do{
 		if(SMAP_EMAC3_GET(SMAP_R_EMAC3_STA_CTRL)&SMAP_E3_PHY_OP_COMP){
 			if(SMAP_EMAC3_GET(SMAP_R_EMAC3_STA_CTRL)&SMAP_E3_PHY_OP_COMP){
-				if((result=SMAP_EMAC3_GET(SMAP_R_EMAC3_STA_CTRL))&SMAP_E3_PHY_OP_COMP){
-					result>>=SMAP_E3_PHY_DATA_BITSFT;
+				if((value=SMAP_EMAC3_GET(SMAP_R_EMAC3_STA_CTRL))&SMAP_E3_PHY_OP_COMP){
+					result = (u16)(value >> SMAP_E3_PHY_DATA_BITSFT);
 					break;
 				}
 			}
@@ -122,15 +125,15 @@ static int DisplayHelpMessage(void){
 	return 2;
 }
 
-static inline void RestartAutoNegotiation(volatile u8 *emac3_regbase, unsigned short int bmsr){
+static inline void RestartAutoNegotiation(volatile u8 *emac3_regbase, u16 bmsr){
 	if(EnableVerboseOutput) DEBUG_PRINTF("smap: restarting auto nego (BMCR=0x%x, BMSR=0x%x)\n", _smap_read_phy(emac3_regbase, SMAP_DsPHYTER_BMCR), bmsr);
 	_smap_write_phy(emac3_regbase, SMAP_DsPHYTER_BMCR, SMAP_PHY_BMCR_ANEN|SMAP_PHY_BMCR_RSAN);
 }
 
 static int InitPHY(struct SmapDriverData *SmapDrivPrivData){
 	int i, result;
-	unsigned int value, value2, LinkSpeed100M, LinkFDX, FlowControlEnabled, AutoNegoRetries;
-	unsigned short int RegDump[6];
+	unsigned int LinkSpeed100M, LinkFDX, FlowControlEnabled, AutoNegoRetries;
+	u16 RegDump[6], value, value2;
 	volatile u8 *emac3_regbase;
 
 	LinkSpeed100M=0;
@@ -172,7 +175,7 @@ WaitLink:
 	else{
 		if(!EnablePinStrapConfig){
 			_smap_write_phy(SmapDrivPrivData->emac3_regbase, SMAP_DsPHYTER_BMCR, 0);
-			value=_smap_read_phy(SmapDrivPrivData->emac3_regbase, SMAP_DsPHYTER_BMSR)&0xFFFF;
+			value=_smap_read_phy(SmapDrivPrivData->emac3_regbase, SMAP_DsPHYTER_BMSR);
 			if(!(value&0x4000)) SmapConfiguration=SmapConfiguration&0xFFFFFEFF;	/* 100Base-TX FDX */
 			if(!(value&0x2000)) SmapConfiguration=SmapConfiguration&0xFFFFFF7F;	/* 100Base-TX HDX */
 			if(!(value&0x1000)) SmapConfiguration=SmapConfiguration&0xFFFFFFBF;	/* 10Base-TX FDX */
@@ -180,7 +183,7 @@ WaitLink:
 
 			DEBUG_PRINTF("smap: no strap mode (conf=0x%x, bmsr=0x%x)\n", SmapConfiguration, value);
 
-			value=_smap_read_phy(SmapDrivPrivData->emac3_regbase, SMAP_DsPHYTER_ANAR)&0xFFFF;
+			value=_smap_read_phy(SmapDrivPrivData->emac3_regbase, SMAP_DsPHYTER_ANAR);
 			value=(SmapConfiguration&0x5E0)|(value&0x1F);
 			DEBUG_PRINTF("smap: anar=0x%x\n", value);
 			_smap_write_phy(SmapDrivPrivData->emac3_regbase, SMAP_DsPHYTER_ANAR, value);
@@ -192,7 +195,7 @@ WaitLink:
 			}
 		}
 
-		DEBUG_PRINTF("smap: auto mode (BMCR=0x%x ANAR=0x%x)\n", _smap_read_phy(SmapDrivPrivData->emac3_regbase, SMAP_DsPHYTER_BMCR)&0xFFFF, _smap_read_phy(SmapDrivPrivData->emac3_regbase, SMAP_DsPHYTER_ANAR)&0xFFFF);
+		DEBUG_PRINTF("smap: auto mode (BMCR=0x%x ANAR=0x%x)\n", _smap_read_phy(SmapDrivPrivData->emac3_regbase, SMAP_DsPHYTER_BMCR), _smap_read_phy(SmapDrivPrivData->emac3_regbase, SMAP_DsPHYTER_ANAR));
 
 RepeatAutoNegoProcess:
 		for(AutoNegoRetries=0; AutoNegoRetries<3; AutoNegoRetries++){
@@ -201,7 +204,7 @@ RepeatAutoNegoProcess:
 				if(SmapDrivPrivData->NetDevStopFlag) return 0;
 			}
 
-			value=_smap_read_phy(SmapDrivPrivData->emac3_regbase, SMAP_DsPHYTER_BMSR)&0xFFFF;
+			value=_smap_read_phy(SmapDrivPrivData->emac3_regbase, SMAP_DsPHYTER_BMSR);
 			if((value&(SMAP_PHY_BMSR_ANCP|0x10))==SMAP_PHY_BMSR_ANCP){	/* 0x30: SMAP_PHY_BMSR_ANCP and Remote fault. */
 				/* This seems to be checking for the link-up status. */
 				for(i=0; !(_smap_read_phy(SmapDrivPrivData->emac3_regbase, SMAP_DsPHYTER_BMSR)&SMAP_PHY_BMSR_LINK); i++){
@@ -265,8 +268,8 @@ RepeatAutoNegoProcess:
 			DelayThread(500000);
 			value=_smap_read_phy(SmapDrivPrivData->emac3_regbase, SMAP_DsPHYTER_FCSCR);
 			value2=_smap_read_phy(SmapDrivPrivData->emac3_regbase, SMAP_DsPHYTER_RECR);
-			if((value2&0xFFFF)!=0 || (value&0xFFFF)>=0x11){
-				if(EnableVerboseOutput) DEBUG_PRINTF("smap: FCSCR=%d RECR=%d\n", value&0xFFFF, value2&0xFFFF);
+			if((value2!=0) || (value>=0x11)){
+				if(EnableVerboseOutput) DEBUG_PRINTF("smap: FCSCR=%d RECR=%d\n", value, value2);
 				_smap_write_phy(SmapDrivPrivData->emac3_regbase, SMAP_DsPHYTER_BMCR, 0);
 				goto WaitLink;
 			}
@@ -334,7 +337,7 @@ static unsigned int LinkCheckTimerCB(struct SmapDriverData *SmapDrivPrivData){
 static int HandleTxIntr(struct SmapDriverData *SmapDrivPrivData){
 	int result, OldState;
 	USE_SMAP_TX_BD;
-	unsigned short int ctrl_stat;
+	u16 ctrl_stat;
 
 	result=0;
 	if(SmapDrivPrivData->NumPacketsInTx>0){
@@ -371,7 +374,10 @@ static void CheckLinkStatus(struct SmapDriverData *SmapDrivPrivData){
 		//Link lost
 		SmapDrivPrivData->LinkStatus=0;
 		PS2IPLinkStateDown();
-		if(InitPHY(SmapDrivPrivData) == 0)
+		InitPHY(SmapDrivPrivData);
+
+		//Link established
+		if(SmapDrivPrivData->LinkStatus)
 			PS2IPLinkStateUp();
 	}
 }
@@ -495,7 +501,7 @@ static int Dev9IntrCb(int flag){
 
 static void Dev9PreDmaCbHandler(int bcr, int dir){
 	volatile u8 *smap_regbase;
-	unsigned short int SliceCount;
+	u16 SliceCount;
 
 	smap_regbase=SmapDriverData.smap_regbase;
 	SliceCount=bcr>>16;
@@ -572,9 +578,6 @@ static inline int initialize(void){
 	int result;
 	iop_event_t EventFlagData;
 	iop_thread_t ThreadData;
-	volatile u8 *emac3_regbase;
-
-	emac3_regbase=SmapDriverData.emac3_regbase;
 
 	EventFlagData.attr=0;
 	EventFlagData.option=0;
@@ -661,8 +664,8 @@ fail_end:
 int smap_init(int argc, char *argv[]){
 	int result, i;
 	const char *CmdString;
-	unsigned short int eeprom_data[4], checksum16;
-	unsigned int mac_address;
+	u16 eeprom_data[4], checksum16;
+	u32 mac_address;
 	USE_SPD_REGS;
 	USE_SMAP_REGS;
 	USE_SMAP_EMAC3_REGS;
@@ -690,15 +693,15 @@ int smap_init(int argc, char *argv[]){
 			EnablePinStrapConfig=0;
 		}
 		else if(strncmp("thpri=", *argv, 6)==0){
-			CmdString=&((unsigned char*)*argv)[6];
-			if(look_ctype_table(CmdString[0])&4){
-				ThreadPriority=strtoul(&((unsigned char*)*argv)[6], NULL, 10);
+			CmdString=&(*argv)[6];
+			if(isdigit(CmdString[0])){
+				ThreadPriority=strtoul(&(*argv)[6], NULL, 10);
 				if(ThreadPriority-9>=0x73){
 					return DisplayHelpMessage();
 				}
 
-				if(((unsigned char*)*argv)[6]!='\0'){
-					while(look_ctype_table(*CmdString)&4){
+				if((*argv)[6]!='\0'){
+					while(isdigit(*CmdString)){
 						CmdString++;
 					}
 					if(*CmdString!='\0') return DisplayHelpMessage();
@@ -707,11 +710,11 @@ int smap_init(int argc, char *argv[]){
 			else return DisplayHelpMessage();
 		}
 		else if(strncmp("thstack=", *argv, 8)==0){
-			CmdString=&((unsigned char*)*argv)[8];
-			if(look_ctype_table(CmdString[0])&4){
-				ThreadStackSize=strtoul(&((unsigned char*)*argv)[8], NULL, 10);
-				if(((unsigned char*)*argv)[8]!='\0'){
-					while(look_ctype_table(*CmdString)&4){
+			CmdString=&(*argv)[8];
+			if(isdigit(CmdString[0])){
+				ThreadStackSize=strtoul(&(*argv)[8], NULL, 10);
+				if((*argv)[8]!='\0'){
+					while(isdigit(*CmdString)){
 						CmdString++;
 					}
 				}
@@ -727,6 +730,7 @@ int smap_init(int argc, char *argv[]){
 		argc--;
 		argv++;
 	}
+
 
 	if(argc!=0) return DisplayHelpMessage();
 
@@ -821,8 +825,8 @@ int smap_init(int argc, char *argv[]){
 	return initialize();
 }
 
-int SMAPGetMACAddress(unsigned char *buffer){
-	unsigned int mac_address_lo, mac_address_hi;
+int SMAPGetMACAddress(u8 *buffer){
+	u32 mac_address_lo, mac_address_hi;
 	volatile u8 *emac3_regbase;
 	int OldState;
 

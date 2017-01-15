@@ -39,7 +39,7 @@ static int SmapDmaTransfer(volatile u8 *smap_regbase, void *buffer, unsigned int
 	return result;
 }
 
-static inline void CopyFromFIFO(volatile u8 *smap_regbase, void *buffer, unsigned int length, unsigned short int RxBdPtr){
+static inline void CopyFromFIFO(volatile u8 *smap_regbase, void *buffer, unsigned int length, u16 RxBdPtr){
 	int i, result;
 
 	SMAP_REG16(SMAP_R_RXFIFO_RD_PTR)=RxBdPtr;
@@ -50,18 +50,18 @@ static inline void CopyFromFIFO(volatile u8 *smap_regbase, void *buffer, unsigne
 
 	if(result<length){
 		for(i=result; i<length; i+=4){
-			((unsigned int *)buffer)[i/4]=SMAP_REG32(SMAP_R_RXFIFO_DATA);
+			((u32*)buffer)[i/4]=SMAP_REG32(SMAP_R_RXFIFO_DATA);
 		}
 	}
 }
 
-inline int HandleRxIntr(struct SmapDriverData *SmapDrivPrivData){
+int HandleRxIntr(struct SmapDriverData *SmapDrivPrivData){
 	USE_SMAP_RX_BD;
 	int NumPacketsReceived;
 	volatile smap_bd_t *PktBdPtr;
 	volatile u8 *smap_regbase;
 	struct pbuf* pbuf;
-	u16 ctrl_stat;
+	u16 ctrl_stat, length;
 
 	smap_regbase=SmapDrivPrivData->smap_regbase;
 
@@ -79,8 +79,10 @@ inline int HandleRxIntr(struct SmapDriverData *SmapDrivPrivData){
 				if(ctrl_stat&SMAP_BD_RX_ALIGNERR) SmapDrivPrivData->RuntimeStats.RxFrameBadAlignmentCount++;
 			}
 			else{
-				if((pbuf=pbuf_alloc(PBUF_RAW, PktBdPtr->length, PBUF_POOL))!=NULL){
-					CopyFromFIFO(SmapDrivPrivData->smap_regbase, pbuf->payload, pbuf->len, PktBdPtr->pointer);
+				length = PktBdPtr->length;
+
+				if((pbuf=pbuf_alloc(PBUF_RAW, length, PBUF_POOL))!=NULL){
+					CopyFromFIFO(SmapDrivPrivData->smap_regbase, pbuf->payload, length, PktBdPtr->pointer);
 
 					//Inform ps2ip that we've received data.
 					SMapLowLevelInput(pbuf);
@@ -127,7 +129,7 @@ int SMAPSendPacket(const void *data, unsigned int length){
 		}
 
 		for(; i<length; i+=4){
-			SMAP_REG32(SMAP_R_TXFIFO_DATA)=((unsigned int *)data)[i/4];
+			SMAP_REG32(SMAP_R_TXFIFO_DATA)=((u32*)data)[i/4];
 		}
 
 		BD_ptr->length=length;

@@ -62,7 +62,7 @@ int smap_init(int argc, char *argv[]);
 int SMAPInitStart(void);
 int SMAPStart(void);
 void SMAPStop(void);
-int SMAPGetMACAddress(unsigned char *buffer);
+int SMAPGetMACAddress(u8 *buffer);
 void PS2IPLinkStateUp(void);
 void PS2IPLinkStateDown(void);
 
