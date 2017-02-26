@@ -756,7 +756,6 @@ int smap_init(int argc, char *argv[]){
 	}
 
 	SMAP_EMAC3_SET(SMAP_R_EMAC3_MODE0, SMAP_E3_SOFT_RESET);
-	SMAP_EMAC3_GET(SMAP_R_EMAC3_MODE0);
 	for(i=9; SMAP_EMAC3_GET(SMAP_R_EMAC3_MODE0)&SMAP_E3_SOFT_RESET; i--){
 		if(i<=0) return -4;
 		DelayThread(1000);
