@@ -18,6 +18,7 @@
 
 struct RuntimeStats{
 	u32 RxDroppedFrameCount;
+	u32 RxErrorCount;
 	u16 RxFrameOverrunCount;
 	u16 RxFrameBadLengthCount;
 	u16 RxFrameBadFCSCount;
@@ -27,6 +28,7 @@ struct RuntimeStats{
 	u16 TxFrameEDEFERCount;
 	u16 TxFrameCollisionCount;
 	u16 TxFrameUnderrunCount;
+	u16 RxAllocFail;
 };
 
 struct SmapDriverData{
