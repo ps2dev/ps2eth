@@ -17,7 +17,7 @@
 #include "smap.h"
 #include "dev9.h"
 
-IRX_ID("smap_driver", 1, 0);
+IRX_ID("smap_driver", 1, 1);
 
 #define	UNKN_1464   *(u16 volatile*)0xbf801464
 
@@ -28,7 +28,7 @@ IRX_ID("smap_driver", 1, 0);
 #define	TIMEOUT				(300*1000)
 #define	MAX_REQ_CNT			8
 
-typedef struct ip_addr	IPAddr;
+typedef struct ip4_addr	IPAddr;
 typedef struct netif		NetIF;
 typedef struct SMapIF	SMapIF;
 typedef struct pbuf		PBuf;
@@ -391,7 +391,8 @@ SMapLowLevelOutput(NetIF* pNetIF,PBuf* pOutput)
 
 //This function is called by the TCP/IP stack when an IP packet should be sent. It'll be invoked in the context of the
 //tcpip-thread, hence no synchronization is required.
-
+// For LWIP versions before v1.3.0.
+#ifdef PRE_LWIP_130_COMPAT
 static err_t
 SMapOutput(NetIF* pNetIF,PBuf* pOutput,IPAddr* pIPAddr)
 {
@@ -399,7 +400,7 @@ SMapOutput(NetIF* pNetIF,PBuf* pOutput,IPAddr* pIPAddr)
 
 	return	pBuf!=NULL ? Send(pBuf):ERR_OK;
 }
-
+#endif
 
 //SMapIFInit():
 
@@ -412,10 +413,18 @@ SMapIFInit(NetIF* pNetIF)
 	pNetIF->state=&NIF;
 	pNetIF->name[0]=IFNAME0;
 	pNetIF->name[1]=IFNAME1;
-	pNetIF->output=SMapOutput;
+#ifdef PRE_LWIP_130_COMPAT
+	pNetIF->output=&SMapOutput;	// For LWIP versions before v1.3.0.
+#else
+	pNetIF->output=&etharp_output;	// For LWIP 1.3.0 and later.
+#endif
 	pNetIF->linkoutput=SMapLowLevelOutput;
 	pNetIF->hwaddr_len=NETIF_MAX_HWADDR_LEN;
-	pNetIF->flags|=(NETIF_FLAG_LINK_UP|NETIF_FLAG_BROADCAST);
+#ifdef PRE_LWIP_130_COMPAT
+	pNetIF->flags|=(NETIF_FLAG_LINK_UP|NETIF_FLAG_BROADCAST);	// For LWIP versions before v1.3.0.
+#else
+	pNetIF->flags|=(NETIF_FLAG_ETHARP|NETIF_FLAG_BROADCAST);	// For LWIP v1.3.0 and later.
+#endif
 	pNetIF->mtu=1500;
 
 	//Get MAC address.
@@ -484,7 +493,7 @@ SMapInit(IPAddr IP,IPAddr NM,IPAddr GW)
 
 
 static void
-PrintIP(struct ip_addr const* pAddr)
+PrintIP(IPAddr const* pAddr)
 {
 	printf("%d.%d.%d.%d",(u8)pAddr->addr,(u8)(pAddr->addr>>8),(u8)(pAddr->addr>>16),(u8)(pAddr->addr>>24));
 }

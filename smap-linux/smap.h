@@ -28,6 +28,7 @@
 
 #include "types.h"
 
+//#define PRE_LWIP_130_COMPAT	1
 
 struct pbuf;
 

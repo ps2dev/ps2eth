@@ -1485,11 +1485,11 @@ ReadEEPROMExec(SMap* pSMap,u8 u8Addr,u16* pu16Data,int iN)
 static void
 ReadFromEEPROM(SMap* pSMap,u8 u8Addr,u16* pu16Data,int iN)
 {
-	u32	u32Flags;
+	int	flags;
 
-	CpuSuspendIntr(&u32Flags);
+	CpuSuspendIntr(&flags);
 	ReadEEPROMExec(pSMap,u8Addr,pu16Data,iN);
-	CpuResumeIntr(u32Flags);
+	CpuResumeIntr(flags);
 }
 
 
