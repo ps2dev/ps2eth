@@ -46,24 +46,24 @@ extern void *_gp;
 static err_t
 SMapLowLevelOutput(NetIF* pNetIF,PBuf* pOutput)
 {
-	unsigned short int TotalLength;
 	struct pbuf* pbuf;
+	u8 *buffer_ptr;
 	static u8 FrameBuffer[MAX_FRAME_SIZE];
 
 	SaveGP();
 
-	if(pOutput->next!=NULL)
+	if(pOutput->tot_len > pOutput->len)
 	{
-		TotalLength=0;
+		buffer_ptr=buffer;
 		pbuf=pOutput;
 		while(pbuf!=NULL)
 		{
-			memcpy(&FrameBuffer[TotalLength], pbuf->payload, pbuf->len);
-			TotalLength+=pbuf->len;
+			memcpy(buffer_ptr, pbuf->payload, pbuf->len);
+			buffer_ptr+=pbuf->len;
 			pbuf=pbuf->next;
 		}
 
-		SMAPSendPacket(FrameBuffer, TotalLength);
+		SMAPSendPacket(FrameBuffer, pOutput->tot_len);
 	}
 	else
 	{
