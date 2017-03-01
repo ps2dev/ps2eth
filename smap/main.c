@@ -33,6 +33,7 @@ static NetIF	NIF;
 //From lwip/err.h and lwip/tcpip.h
 
 #define	ERR_OK		0		//No error, everything OK
+#define ERR_MEM        -1		//Out of memory error.
 #define	ERR_CONN		-6		//Not connected
 #define	ERR_IF		-11	//Low-level netif error
 
@@ -46,33 +47,28 @@ extern void *_gp;
 static err_t
 SMapLowLevelOutput(NetIF* pNetIF,PBuf* pOutput)
 {
+	err_t result;
 	struct pbuf* pbuf;
-	u8 *buffer_ptr;
-	static u8 FrameBuffer[MAX_FRAME_SIZE];
 
 	SaveGP();
 
+	result = ERR_OK;
 	if(pOutput->tot_len > pOutput->len)
 	{
-		buffer_ptr=buffer;
-		pbuf=pOutput;
-		while(pbuf!=NULL)
+		pbuf_ref(pOutput);	//Increment reference count because LWIP must free the PBUF, not the driver!
+		if((pbuf = pbuf_coalesce(pOutput, PBUF_RAW)) != pOutput)
 		{
-			memcpy(buffer_ptr, pbuf->payload, pbuf->len);
-			buffer_ptr+=pbuf->len;
-			pbuf=pbuf->next;
-		}
-
-		SMAPSendPacket(FrameBuffer, pOutput->tot_len);
-	}
-	else
-	{
+			SMAPSendPacket(pbuf->payload, pbuf->len);
+			pbuf_free(pbuf);
+		} else
+			result = ERR_MEM;
+	} else {
 		SMAPSendPacket(pOutput->payload, pOutput->len);
 	}
 
 	RestoreGP();
 
-	return ERR_OK;
+	return result;
 }
 
 //SMapOutput():
