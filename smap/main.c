@@ -18,7 +18,7 @@
 
 #define dbgprintf(args...) DEBUG_PRINTF(args)
 
-IRX_ID("smap_driver", 2, 2);
+IRX_ID("smap_driver", 3, 1);
 
 #define	IFNAME0	's'
 #define	IFNAME1	'm'
@@ -27,6 +27,9 @@ typedef struct ip4_addr	IPAddr;
 typedef struct netif	NetIF;
 typedef struct SMapIF	SMapIF;
 typedef struct pbuf	PBuf;
+
+static struct pbuf *TxHead, *TxTail;
+static void EnQTxPacket(struct pbuf *tx);
 
 static NetIF	NIF;
 
@@ -57,13 +60,15 @@ SMapLowLevelOutput(NetIF* pNetIF,PBuf* pOutput)
 	{
 		pbuf_ref(pOutput);	//Increment reference count because LWIP must free the PBUF, not the driver!
 		if((pbuf = pbuf_coalesce(pOutput, PBUF_RAW)) != pOutput)
-		{
-			SMAPSendPacket(pbuf->payload, pbuf->len);
-			pbuf_free(pbuf);
+		{	//No need to increase reference count because pbuf_coalesce() does it.
+			EnQTxPacket(pbuf);
+			SMAPXmit();
 		} else
 			result = ERR_MEM;
 	} else {
-		SMAPSendPacket(pOutput->payload, pOutput->len);
+		pbuf_ref(pOutput);	//This will be freed later.
+		EnQTxPacket(pOutput);
+		SMAPXmit();
 	}
 
 	RestoreGP();
@@ -104,6 +109,9 @@ SMapIFInit(NetIF* pNetIF)
 {
 	SaveGP();
 
+	TxHead = NULL;
+	TxTail = NULL;
+
 	pNetIF->name[0]=IFNAME0;
 	pNetIF->name[1]=IFNAME1;
 #ifdef PRE_LWIP_130_COMPAT
@@ -139,6 +147,67 @@ void SMapLowLevelInput(PBuf* pBuf)
 	//the received data to ps2ip.
 
 	ps2ip_input(pBuf,&NIF);
+}
+
+static void EnQTxPacket(struct pbuf *tx)
+{
+	int OldState;
+
+	CpuSuspendIntr(&OldState);
+
+	if(TxHead != NULL)
+		TxHead->next = tx;
+
+	TxHead = tx;
+	tx->next = NULL;
+
+	if(TxTail == NULL)	//Queue empty
+		TxTail = TxHead;
+
+	CpuResumeIntr(OldState);
+}
+
+int SMapTxPacketNext(void **payload)
+{
+	int len;
+
+	if(TxTail != NULL)
+	{
+		*payload = TxTail->payload;
+		len = TxTail->len;
+	} else
+		len = 0;
+
+	return len;
+}
+
+void SMapTxPacketDeQ(void)
+{
+	struct pbuf *toFree;
+	int OldState;
+
+	toFree = NULL;
+
+	CpuSuspendIntr(&OldState);
+	if(TxTail != NULL)
+	{
+		toFree = TxTail;
+
+		if(TxTail == TxHead) {
+			//Last in queue.
+			TxTail = NULL;
+			TxHead = NULL;
+		} else {
+			TxTail = TxTail->next;
+		}
+	}
+	CpuResumeIntr(OldState);
+
+	if(toFree != NULL)
+	{
+		toFree->next = NULL;
+		pbuf_free(toFree);
+	}
 }
 
 static inline int SMapInit(IPAddr *IP, IPAddr *NM, IPAddr *GW, int argc, char *argv[])

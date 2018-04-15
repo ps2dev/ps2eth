@@ -367,9 +367,6 @@ static int HandleTxIntr(struct SmapDriverData *SmapDrivPrivData){
 			result++;
 			SmapDrivPrivData->TxDNVBDIndex++;
 		}while(SmapDrivPrivData->NumPacketsInTx>0);
-
-		//Not done in the SONY original (see SMAPSendPacket for more details).
-		SetEventFlag(SmapDrivPrivData->TxEndEventFlag, 1);
 	}
 
 	return result;
@@ -469,14 +466,11 @@ static void IntrHandlerThread(struct SmapDriverData *SmapDrivPrivData){
 				dev9IntrEnable(DEV9_SMAP_INTR_MASK2);
 			}
 
-			/*	In the SONY original, the XMIT event handler was here.
-				But for performance, it is moved into SMAPSendPacket() instead.
-				It used to copy the frames into the Tx buffer and set up the BDs.
-				Immediately after that, there was also a call to the TXDNV handler function too.
-
-				After which, the interrupts were re-enabled (see above). */
-			/* if(EFBits&NETDEV_EVENT_XMIT)
-				HandleTxReqs(SmapDrivPrivData);  */
+			/*	Non-Sony: process transmission if the last packet was not sent. Not sure how the Sony system managed to work,
+				but the system does lock up when the queue is filled up and if there is no way to retry transmissions.	*/
+			if((EFBits&SMAP_EVENT_XMIT) || (SmapDrivPrivData->packetToSend != NULL))
+				HandleTxReqs(SmapDrivPrivData);
+			//This was added in later versions.
 			HandleTxIntr(SmapDrivPrivData);
 
 			//dev9IntrEnable(DEV9_SMAP_INTR_MASK2);
@@ -586,6 +580,12 @@ void SMAPStop(void){
 	RestoreGP();
 }
 
+void SMAPXmit(void){
+	SaveGP();
+	SetEventFlag(SmapDriverData.Dev9IntrEventFlag, SMAP_EVENT_XMIT);
+	RestoreGP();
+}
+
 static inline int initialize(void){
 	int result;
 	iop_event_t EventFlagData;
@@ -599,11 +599,6 @@ static inline int initialize(void){
 		DEBUG_PRINTF("smap: CreateEventFlag -> %d\n", result);
 		return -6;
 	}
-	//Not done in the SONY original (refer to SMAPSendPacket for more details).
-	if((result=SmapDriverData.TxEndEventFlag=CreateEventFlag(&EventFlagData))<0){
-		DEBUG_PRINTF("smap: CreateEventFlag -> %d\n", result);
-		return -6;
-	}
 
 	ThreadData.attr=TH_C;
 	ThreadData.thread=(void*)&IntrHandlerThread;
@@ -612,7 +607,6 @@ static inline int initialize(void){
 	ThreadData.stacksize=ThreadStackSize;
 	if((result=SmapDriverData.IntrHandlerThreadID=CreateThread(&ThreadData))<0){
 		DEBUG_PRINTF("smap: CreateThread -> %d\n", result);
-		DeleteEventFlag(SmapDriverData.TxEndEventFlag);
 		DeleteEventFlag(SmapDriverData.Dev9IntrEventFlag);
 		return result;
 	}
@@ -620,7 +614,6 @@ static inline int initialize(void){
 	if((result=StartThread(SmapDriverData.IntrHandlerThreadID, &SmapDriverData))<0){
 		printf("smap: StartThread -> %d\n", result);
 		DeleteThread(SmapDriverData.IntrHandlerThreadID);
-		DeleteEventFlag(SmapDriverData.TxEndEventFlag);
 		DeleteEventFlag(SmapDriverData.Dev9IntrEventFlag);
 		return result;
 	}

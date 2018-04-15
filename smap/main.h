@@ -40,8 +40,8 @@ struct SmapDriverData{
 	unsigned char TxBDIndex;
 	unsigned char RxBDIndex;
 	unsigned char TxDNVBDIndex;
+	void *packetToSend;
 	int Dev9IntrEventFlag;
-	int TxEndEventFlag;
 	int IntrHandlerThreadID;
 	int TxHandlerThreadID;
 	unsigned char SmapIsInitialized;	//SMAP driver is initialized (software)
@@ -65,10 +65,13 @@ int smap_init(int argc, char *argv[]);
 int SMAPInitStart(void);
 int SMAPStart(void);
 void SMAPStop(void);
+void SMAPXmit(void);
 int SMAPGetMACAddress(u8 *buffer);
 void PS2IPLinkStateUp(void);
 void PS2IPLinkStateDown(void);
 
 void SMapLowLevelInput(struct pbuf* pBuf);
+int SMapTxPacketNext(void **payload);
+void SMapTxPacketDeQ(void);
 
 #include "xfer.h"
