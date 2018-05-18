@@ -342,31 +342,30 @@ static unsigned int LinkCheckTimerCB(struct SmapDriverData *SmapDrivPrivData){
 }
 
 static int HandleTxIntr(struct SmapDriverData *SmapDrivPrivData){
-	int result, OldState;
+	int result, i;
 	USE_SMAP_TX_BD;
 	u16 ctrl_stat;
 
 	result=0;
-	if(SmapDrivPrivData->NumPacketsInTx>0){
-		do{
-			if((ctrl_stat=tx_bd[SmapDrivPrivData->TxDNVBDIndex&(SMAP_BD_MAX_ENTRY-1)].ctrl_stat)&SMAP_BD_TX_READY) break;
-
-			CpuSuspendIntr(&OldState);
-			SmapDrivPrivData->TxBufferSpaceAvailable+=(tx_bd[SmapDrivPrivData->TxDNVBDIndex&(SMAP_BD_MAX_ENTRY-1)].length+3)&~3;
-			SmapDrivPrivData->NumPacketsInTx--;
-			CpuResumeIntr(OldState);
-
+	while(SmapDrivPrivData->NumPacketsInTx>0){
+		if(!((ctrl_stat=tx_bd[SmapDrivPrivData->TxDNVBDIndex&(SMAP_BD_MAX_ENTRY-1)].ctrl_stat)&SMAP_BD_TX_READY)){
 			if(ctrl_stat&(SMAP_BD_TX_UNDERRUN|SMAP_BD_TX_LCOLL|SMAP_BD_TX_ECOLL|SMAP_BD_TX_EDEFER|SMAP_BD_TX_LOSSCR)){
+				for(i=0; i < 16; i++)
+					if((ctrl_stat>>i) & 1) SmapDrivPrivData->RuntimeStats.TxErrorCount++;
+
 				SmapDrivPrivData->RuntimeStats.TxDroppedFrameCount++;
 				if(ctrl_stat&SMAP_BD_TX_LOSSCR) SmapDrivPrivData->RuntimeStats.TxFrameLOSSCRCount++;
 				if(ctrl_stat&SMAP_BD_TX_EDEFER) SmapDrivPrivData->RuntimeStats.TxFrameEDEFERCount++;
 				if(ctrl_stat&(SMAP_BD_TX_SCOLL|SMAP_BD_TX_MCOLL|SMAP_BD_TX_LCOLL|SMAP_BD_TX_ECOLL)) SmapDrivPrivData->RuntimeStats.TxFrameCollisionCount++;
 				if(ctrl_stat&SMAP_BD_TX_UNDERRUN) SmapDrivPrivData->RuntimeStats.TxFrameUnderrunCount++;
 			}
+		} else
+			break;
 
-			result++;
-			SmapDrivPrivData->TxDNVBDIndex++;
-		}while(SmapDrivPrivData->NumPacketsInTx>0);
+		result++;
+		SmapDrivPrivData->TxBufferSpaceAvailable+=(tx_bd[SmapDrivPrivData->TxDNVBDIndex&(SMAP_BD_MAX_ENTRY-1)].length+3)&~3;
+		SmapDrivPrivData->TxDNVBDIndex++;
+		SmapDrivPrivData->NumPacketsInTx--;
 	}
 
 	return result;
@@ -406,11 +405,13 @@ static void IntrHandlerThread(struct SmapDriverData *SmapDrivPrivData){
 				SmapDrivPrivData->NetDevStopFlag=0;
 				SmapDrivPrivData->LinkStatus=0;
 				SmapDrivPrivData->SmapIsInitialized=0;
+				SmapDrivPrivData->SmapDriverStarted=0;
 				PS2IPLinkStateDown();
 			}
 		}
 		if(EFBits&SMAP_EVENT_START){
 			if(!SmapDrivPrivData->SmapIsInitialized){
+				SmapDrivPrivData->SmapDriverStarted=1;
 				dev9IntrEnable(DEV9_SMAP_INTR_MASK2);
 				if((result=InitPHY(SmapDrivPrivData))!=0) break;
 				if(SmapDrivPrivData->NetDevStopFlag){
@@ -476,6 +477,7 @@ static void IntrHandlerThread(struct SmapDriverData *SmapDrivPrivData){
 				dev9IntrEnable(SMAP_INTR_TXDNV);
 			}
 
+			//Do the link check, only if there has not been any incoming traffic in a while.
 			if(ResetCounterFlag){
 				counter=3;
 				continue;
