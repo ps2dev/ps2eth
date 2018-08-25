@@ -14,3 +14,7 @@ clean:
 	$(MAKE) -C common clean
 	$(MAKE) -C smap clean
 	$(MAKE) -C smap-linux clean
+
+install:
+	mkdir -p $(PS2SDK)/iop/irx/
+	cp smap/ps2smap.irx $(PS2SDK)/iop/irx/
