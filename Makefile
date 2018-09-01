@@ -16,5 +16,7 @@ clean:
 	$(MAKE) -C smap-linux clean
 
 install:
+	mkdir -p $(PS2DEV)/ps2eth/smap
+	cp smap/ps2smap.irx $(PS2DEV)/ps2eth/smap/
 	mkdir -p $(PS2SDK)/iop/irx/
-	cp smap/ps2smap.irx $(PS2SDK)/iop/irx/
+	ln -s $(PS2DEV)/ps2eth/smap/ps2smap.irx $(PS2SDK)/iop/irx/
