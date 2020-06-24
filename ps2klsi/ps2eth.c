@@ -15,6 +15,8 @@
 
 #include <tamtypes.h>
 #include <thbase.h>
+#include <stdio.h>
+#include <sysclib.h>
 
 #include "lwip/pbuf.h"
 
@@ -38,6 +40,8 @@ static err_t ethernetif_output(struct netif *netif, struct pbuf *p,
 
 
 extern u8_t eaddr[6];  //read_mac uses this for the mac address.
+
+extern int kue_do_transfer( int epid,int semh, void * data, int len );
 
 static char inbuffer[1500] __attribute__((aligned(64)));
 
@@ -67,7 +71,7 @@ static void
 low_level_init(struct netif *netif)
 {
   struct ethernetif *ethernetif;
-  struct t_thread t;
+  iop_thread_t t;
   int tid;
 
   ethernetif = netif->state;
@@ -88,22 +92,22 @@ low_level_init(struct netif *netif)
   // create semaphores.
   ethernetif->semin.attr = 0;
   ethernetif->semin.option = 0;
-  ethernetif->semin.init_count = 0;
-  ethernetif->semin.max_count = 1;
+  ethernetif->semin.initial = 0;
+  ethernetif->semin.max = 1;
   ethernetif->hsemin = CreateSema( &(ethernetif->semin) );
 
   ethernetif->semout.attr = 0;
   ethernetif->semout.option = 0;
-  ethernetif->semout.init_count = 0;
-  ethernetif->semout.max_count = 1;
+  ethernetif->semout.initial = 0;
+  ethernetif->semout.max = 1;
   ethernetif->hsemout = CreateSema( &(ethernetif->semout) );
 
   // Start the read thread..
  
-  t.type = 0x02000000;
-  t.unknown = 0;
-  t.function = readthread;
-  t.stackSize = 0x800;
+  t.attr = 0x02000000;
+  t.option = 0;
+  t.thread = readthread;
+  t.stacksize = 0x800;
   t.priority = 0x1e;
   tid = CreateThread( &t );
   if ( tid >= 0 )
@@ -291,7 +295,7 @@ arp_timer(void *arg)
 /*-----------------------------------------------------------------------------------*/
 
 
-void
+err_t
 klsi_init(struct netif *netif)
 {
   struct ethernetif *ethernetif;
@@ -309,5 +313,6 @@ klsi_init(struct netif *netif)
   etharp_init();
 
   //sys_timeout(ARP_TMR_INTERVAL, (sys_timeout_handler)arp_timer, NULL);
+  return 0;
 }
 /*-----------------------------------------------------------------------------------*/

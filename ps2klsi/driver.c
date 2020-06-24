@@ -14,11 +14,9 @@
 
 #include <usbd.h>
 #include <tamtypes.h>
-#include <fileio.h>
-#include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
-#include <kernel.h>
-#include <ps2debug.h>
+#include <thbase.h>
 
 
 #include <lwip/netif.h>
@@ -48,6 +46,8 @@ static int cepid;   // an equally bad name for the Control End Point.
 char   buffer[ BUFLEN ];  // Probably not used. 
 
 extern  struct ethernetif klsi_etherif;
+
+extern int kue_do_transfer( int epid,int semh, void * data, int len );
 
 
 /*
@@ -209,16 +209,16 @@ static void kue_callback( int resultCode, int bytes, void *arg)
 
 static int kue_do_request( int dev, UsbDeviceRequest *req, void *data)
 {
-   struct t_sema sem;
+   iop_sema_t sem;
    int semh;
 
    sem.attr = 0;
    sem.option = 0;
-   sem.init_count = 0;
-   sem.max_count = 1;
+   sem.initial = 0;
+   sem.max = 1;
 
    semh = CreateSema( &sem );
-   UsbTransfer( cepid, data, req->length, req, kue_callback, semh ); 
+   UsbTransfer( cepid, data, req->length, req, kue_callback, (void*)semh ); 
 
    WaitSema( semh ); 
 
@@ -246,7 +246,7 @@ static void kue_transfer_callback( int resultCode, int bytes, void *arg)
 
 int kue_do_transfer( int epid,int semh, void * data, int len )
 {
-   UsbTransfer( epid, data, len, NULL, kue_transfer_callback, semh ); 
+   UsbTransfer( epid, data, len, NULL, kue_transfer_callback, (void*)semh ); 
    WaitSema( semh ); 
 
    if ( transferBytes > 1 )
@@ -378,7 +378,7 @@ static void kue_reset( )
 
 
 static struct ip_addr ipaddr, netmask, gw;
-extern void klsi_init( struct netif *netif );
+extern err_t klsi_init( struct netif *netif );
 extern err_t tcpip_input(struct pbuf *p, struct netif *inp);
 
 /*
@@ -516,9 +516,9 @@ int usb_klsi_attach( int deviceID )
   kue_setword( KUE_CMD_SET_URB_SIZE, 64 );
 
   // need to open pipes before adding interface!
-  klsi_etherif.hin = UsbOpenBulkEndpoint( global, &(eds[klsi_etherif.epin]) );
+  klsi_etherif.hin = sceUsbdOpenPipeAligned( global, &(eds[klsi_etherif.epin]) );
 
-  klsi_etherif.hout = UsbOpenBulkEndpoint( global, &(eds[klsi_etherif.epout]) );
+  klsi_etherif.hout = sceUsbdOpenPipeAligned( global, &(eds[klsi_etherif.epout]) );
 
   // ipaddr, netmask, and gw now setup in _start from argv
   netif_add( &ipaddr, &netmask, &gw, NULL, klsi_init, tcpip_input );
@@ -591,7 +591,6 @@ int _start( int argc, char **argv)
    int ret;
    void * usb;
    int i,x;
-   struct t_thread t;
 
    printf( "USB KLSI Driver\n" );
 
