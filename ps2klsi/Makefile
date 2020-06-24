@@ -6,20 +6,19 @@
 
 TOPDIR = ..
 
-IOP_BIN = ../bin/ps2klsi.irx
-IOP_OBJS = driver.o ps2eth.o
+IOP_BIN = ps2klsi.irx
+IOP_OBJS = driver.o ps2eth.o imports.o
 
-IOP_LDFLAGS += -L$(PS2IP)/iop/lib
-IOP_LIBS += -liop_ps2ip -llwip_common
+IOP_LIBS += -llwip_common
 
 
 all: $(IOP_BIN)
 
 clean:
-	-rm -f *.o
+	rm -f $(IOP_BIN) $(IOP_OBJS)
 
-include $(TOPDIR)/Makefile.pref
 include $(TOPDIR)/Makefile.global
 
-include $(PS2LIB)/Makefile.pref
-include $(PS2LIB)/Makefile.iopglobal
+include $(PS2SDK)/Defs.make
+include $(PS2SDK)/samples/Makefile.pref
+include $(PS2SDK)/samples/Makefile.iopglobal
