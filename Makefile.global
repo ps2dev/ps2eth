@@ -6,7 +6,7 @@
 #  Global settings.  Nothing in this file should require modification.
 
 COMMON_INC = $(TOPDIR)/common/include
-COMMON_LIB = $(TOPDIR)/common/lib
+COMMON_LIB = $(TOPDIR)/common/lwip
 
 IOP_INCS += -I$(COMMON_INC) -I$(COMMON_INC)/ipv4
 
