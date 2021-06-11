@@ -498,12 +498,16 @@ static void IntrHandlerThread(struct SmapDriverData *SmapDrivPrivData){
 }
 
 static int Dev9IntrCb(int flag){
+#if USE_GP_REGISTER
 	SaveGP();
+#endif
 
 	dev9IntrDisable(DEV9_SMAP_ALL_INTR_MASK);
 	iSetEventFlag(SmapDriverData.Dev9IntrEventFlag, SMAP_EVENT_INTR);
 
+#if USE_GP_REGISTER
 	RestoreGP();
+#endif
 
 	return 0;
 }
@@ -541,7 +545,9 @@ int SMAPInitStart(void){
 	int result;
 	volatile u8 *emac3_regbase;
 
+#if USE_GP_REGISTER
 	SaveGP();
+#endif
 
 	if(!SmapDriverData.SmapIsInitialized){
 		emac3_regbase=SmapDriverData.emac3_regbase;
@@ -563,24 +569,34 @@ int SMAPInitStart(void){
 		else SmapDriverData.NetDevStopFlag=0;
 	}
 
+#if USE_GP_REGISTER
 	RestoreGP();
+#endif
 
 	return 0;
 }
 
 int SMAPStart(void){
+#if USE_GP_REGISTER
 	SaveGP();
+#endif
 	SetEventFlag(SmapDriverData.Dev9IntrEventFlag, SMAP_EVENT_START);
+#if USE_GP_REGISTER
 	RestoreGP();
+#endif
 
 	return 0;
 }
 
 void SMAPStop(void){
+#if USE_GP_REGISTER
 	SaveGP();
+#endif
 	SetEventFlag(SmapDriverData.Dev9IntrEventFlag, SMAP_EVENT_STOP);
 	SmapDriverData.NetDevStopFlag=1;
+#if USE_GP_REGISTER
 	RestoreGP();
+#endif
 }
 
 static void ClearPacketQueue(struct SmapDriverData *SmapDrivPrivData){
@@ -599,7 +615,9 @@ static void ClearPacketQueue(struct SmapDriverData *SmapDrivPrivData){
 }
 
 void SMAPXmit(void){
+#if USE_GP_REGISTER
 	SaveGP();
+#endif
 
 	if(SmapDriverData.LinkStatus){
 		SetEventFlag(SmapDriverData.Dev9IntrEventFlag, SMAP_EVENT_XMIT);
@@ -608,7 +626,9 @@ void SMAPXmit(void){
 		ClearPacketQueue(&SmapDriverData);
 	}
 
+#if USE_GP_REGISTER
 	RestoreGP();
+#endif
 }
 
 static inline int initialize(void){
