@@ -40,7 +40,9 @@ static NetIF	NIF;
 #define	ERR_CONN		-6		//Not connected
 #define	ERR_IF		-11	//Low-level netif error
 
+#if USE_GP_REGISTER
 extern void *_gp;
+#endif
 
 //SMapLowLevelOutput():
 
@@ -53,7 +55,9 @@ SMapLowLevelOutput(NetIF* pNetIF,PBuf* pOutput)
 	err_t result;
 	struct pbuf* pbuf;
 
+#if USE_GP_REGISTER
 	SaveGP();
+#endif
 
 	result = ERR_OK;
 	if(pOutput->tot_len > pOutput->len)
@@ -71,7 +75,9 @@ SMapLowLevelOutput(NetIF* pNetIF,PBuf* pOutput)
 		SMAPXmit();
 	}
 
+#if USE_GP_REGISTER
 	RestoreGP();
+#endif
 
 	return result;
 }
@@ -88,13 +94,17 @@ SMapOutput(NetIF* pNetIF,PBuf* pOutput,IPAddr* pIPAddr)
 	err_t result;
 	PBuf* pBuf;
 
+#if USE_GP_REGISTER
 	SaveGP();
+#endif
 
 	pBuf=etharp_output(pNetIF,pIPAddr,pOutput);
 
 	result=pBuf!=NULL ? SMapLowLevelOutput(pNetIF, pBuf):ERR_OK;
 
+#if USE_GP_REGISTER
 	RestoreGP();
+#endif
 
 	return result;
 }
@@ -107,7 +117,9 @@ SMapOutput(NetIF* pNetIF,PBuf* pOutput,IPAddr* pIPAddr)
 static err_t
 SMapIFInit(NetIF* pNetIF)
 {
+#if USE_GP_REGISTER
 	SaveGP();
+#endif
 
 	TxHead = NULL;
 	TxTail = NULL;
@@ -136,7 +148,9 @@ SMapIFInit(NetIF* pNetIF)
 	//Enable sending and receiving of data.
 	SMAPInitStart();
 
+#if USE_GP_REGISTER
 	RestoreGP();
+#endif
 
 	return	ERR_OK;
 }

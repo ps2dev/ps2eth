@@ -12,7 +12,8 @@ IOP_OBJS = main.o smap.o xfer.o imports.o
 LWIP_DHCP=1
 
 IOP_INCS += -I$(PS2SDK)/iop/include
-IOP_CFLAGS += -Wall -fno-builtin -D_IOP -mgpopt -G8192
+IOP_CFLAGS += -Wall -fno-builtin -D_IOP
+IOP_PREFER_GPOPT = 8192
 IOP_LDFLAGS += -s
 
 ifdef LWIP_DHCP
