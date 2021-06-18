@@ -1,0 +1,21 @@
+name: CI-compile
+
+on:
+  push:
+  pull_request:
+  repository_dispatch:
+    types: [run_build]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: ps2dev/ps2dev:latest
+    steps:
+    - name: Install dependencies
+      run: apk add build-base git zip
+
+    - uses: actions/checkout@v2
+    - run: git fetch --prune --unshallow
+
+    - name: Compile ps2eth
+      run: make --trace clean all install

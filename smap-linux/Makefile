@@ -4,7 +4,7 @@
 #                           (C)2003, adresd     ( adresd_ps2dev@yahoo.com )
 #  ------------------------------------------------------------------------
 
-
+IOP_SRC_DIR = ./
 IOP_BIN = ps2smap.irx
 IOP_OBJS = main.o smap.o imports.o
 
@@ -26,7 +26,7 @@ endif
 all: $(IOP_BIN)
 
 clean:
-	-rm -f $(IOP_BIN) $(IOP_OBJS)
+	-rm -r -f $(IOP_BIN) $(IOP_OBJS) $(IOP_OBJS_DIR)
 
 include $(PS2SDK)/Defs.make
 include $(PS2SDK)/samples/Makefile.pref

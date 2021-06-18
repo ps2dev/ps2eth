@@ -3,7 +3,7 @@
 #  |     ___|   |____       (C)2002, David Ryan ( Oobles@hotmail.com )
 #
 #  ------------------------------------------------------------------------
-
+IOP_SRC_DIR = ./
 TOPDIR = ..
 
 IOP_BIN = ps2klsi.irx
@@ -15,7 +15,7 @@ IOP_LIBS += -llwip_common
 all: $(IOP_BIN)
 
 clean:
-	rm -f $(IOP_BIN) $(IOP_OBJS)
+	rm -r -f $(IOP_BIN) $(IOP_OBJS) $(IOP_OBJS_DIR)
 
 include $(TOPDIR)/Makefile.global
 
