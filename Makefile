@@ -5,7 +5,7 @@
 
 .PHONY: all clean install
 
-all: 
+all:
 	$(MAKE) -C common
 	$(MAKE) -C ps2klsi
 	$(MAKE) -C smap

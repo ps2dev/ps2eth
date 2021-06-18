@@ -10,7 +10,7 @@ driver before using it.
 CURRENT DRIVERS
 ----------------------------------------------------------------------------
 
-ps2klsi - This driver is for USB attached Kawasaki chipset ethernet 
+ps2klsi - This driver is for USB attached Kawasaki chipset ethernet
           adapters.  This currently only recognises the NetGear EA101
           network adapter. (BSD License)
 
