@@ -37,4 +37,6 @@ I_bcmp
 I_bcopy
 I_strcpy
 I_strlen
+I_memcmp
+I_memmove
 sysclib_IMPORTS_end
